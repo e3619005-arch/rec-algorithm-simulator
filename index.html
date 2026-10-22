@@ -1,0 +1,2011 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Симулятор рекомендательного алгоритма</title>
+<script>
+document.documentElement.dataset.theme = localStorage.getItem("recsim-theme") || "dark";
+</script>
+<style>
+:root{
+  --bg:#000; --card:#0f0f0f; --panel:#161616; --elev:#1f1f1f;
+  --line:#262626; --line-2:#363636;
+  --text:#f5f5f5; --muted:#a8a8a8;
+  --up:#3ec97e; --down:#ff3040; --flat:#3f3f3f; --blue:#0095f6;
+  --track:#080808;
+  --vcard-a:#181818; --vcard-b:#0a0a0a; --vicon:#fff;
+  --vicon-glow:drop-shadow(0 12px 28px rgba(255,255,255,.07));
+  --vcard-spot:rgba(255,255,255,.05);
+  --title-shadow:0 2px 12px rgba(0,0,0,.6);
+  --chip-bg:rgba(22,22,22,.9); --chip-line:#363636; --chip-fg:#a8a8a8;
+  /* АДАПТИВНАЯ плашка объяснения — тёмная тема */
+  --explain-bg:#161616;
+  --explain-fg:#f5f5f5;
+  --explain-line:#2a2a2a;
+  --explain-accent:#4a4a4a;
+  --ripple:rgba(255,255,255,.18);
+  --panel-shadow:none;
+  --font-body:"Trebuchet MS", "Segoe UI", Tahoma, Verdana, sans-serif;
+  --font-display:Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --font-mono:"Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Интерактивный фон — цвет линий в тёмной теме */
+  --path-line: rgba(255, 255, 255, 0.35);
+  --path-fade: rgba(0, 0, 0, 0.85);
+}
+:root[data-theme="light"]{
+  --bg:#fafafa; --card:#ffffff; --panel:#f6f6f6; --elev:#efefef;
+  --line:#e7e7e7; --line-2:#d9d9d9;
+  --text:#262626; --muted:#757575;
+  --flat:#c7c7c7; --track:#ebebeb;
+  --vcard-a:#ffffff; --vcard-b:#f0f0f0; --vicon:#262626;
+  --vicon-glow:drop-shadow(0 12px 26px rgba(0,0,0,.14));
+  --vcard-spot:rgba(0,0,0,.035);
+  --title-shadow:none;
+  --chip-bg:rgba(255,255,255,.85); --chip-line:#dcdcdc; --chip-fg:#737373;
+  /* АДАПТИВНАЯ плашка объяснения — светлая тема */
+  --explain-bg:#f7f9fc;
+  --explain-fg:#1f2430;
+  --explain-line:#e3e8f0;
+  --explain-accent:#d5dce8;
+  --ripple:rgba(0,0,0,.08);
+  --panel-shadow:0 2px 12px rgba(0,0,0,.05);
+  /* Интерактивный фон — цвет линий в светлой теме */
+  --path-line: rgba(0, 0, 0, 0.25);
+  --path-fade: rgba(250, 250, 250, 0.85);
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+
+/* Интерактивный canvas-фон: плавающие линии */
+#bgPaths{
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  z-index: -2;
+  pointer-events: none;
+  color: var(--path-line);
+  opacity: 0;
+  transition: opacity .6s ease-out;
+}
+/* Виньетка поверх линий, чтобы контент читался */
+.bg-mask{
+  position: fixed; inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 50%, transparent 0%, var(--path-fade) 95%),
+    linear-gradient(to bottom, var(--path-fade) 0%, transparent 12%, transparent 88%, var(--path-fade) 100%);
+}
+
+body{
+  font-family:var(--font-body);
+  color:var(--text);
+  background: var(--bg);
+  min-height:100vh; overflow-x:hidden;
+  transition: color .35s ease, background-color .35s ease;
+}
+
+.icon{
+  width:18px; height:18px; flex:none; display:inline-block; vertical-align:-3px;
+  fill:none; stroke:currentColor; stroke-width:2;
+  stroke-linecap:round; stroke-linejoin:round;
+}
+
+.app{
+  max-width:1240px; margin:0 auto; padding:0 20px 48px;
+  animation:rise .6s cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes rise{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:none;} }
+
+header{
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:18px 28px;
+  padding:30px 0 22px; border-bottom:1px solid var(--line);
+}
+.brand{ flex:1 1 420px; }
+.eyebrow{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.28em;
+  text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:8px;
+}
+.eyebrow .dot{ width:8px; height:8px; border-radius:50%; background:var(--down); animation:rec 1.6s ease-in-out infinite; }
+@keyframes rec{ 0%,100%{ opacity:1;} 50%{ opacity:.35;} }
+h1{
+  font-family:var(--font-display);
+  font-size:clamp(28px, 4.2vw, 44px); font-weight:700; line-height:1.1;
+  letter-spacing:-.01em; margin-top:8px;
+}
+h1 em{ font-style:italic; color:var(--blue); }
+.subtitle{ margin-top:8px; color:var(--muted); font-size:15px; max-width:560px; }
+
+.head-controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.counter-chip{
+  background:var(--panel); border:1px solid var(--line); border-radius:999px;
+  padding:9px 16px; font-size:14px; color:var(--muted); display:flex; gap:8px; align-items:center;
+}
+.counter-chip b{
+  font-family:var(--font-mono); font-size:17px; color:var(--text);
+  display:inline-block; min-width:22px; text-align:center;
+}
+.counter-chip.pop b{ animation:pop .35s ease; }
+@keyframes pop{ 40%{ transform:scale(1.45);} }
+
+.speed-chip{
+  background:var(--panel); border:1px solid var(--line); border-radius:999px;
+  padding:7px 14px 7px 12px; display:flex; align-items:center; gap:9px;
+  font-size:12.5px; color:var(--muted);
+}
+.speed-chip .icon{ width:15px; height:15px; }
+.speed-chip b{ font-family:var(--font-mono); font-size:13px; color:var(--text); min-width:32px; text-align:right; }
+.speed-lbl{ font-size:12px; color:var(--muted); white-space:nowrap; }
+.speed-range{
+  -webkit-appearance:none; appearance:none;
+  width:86px; height:3px; border-radius:2px;
+  background:var(--line-2); outline:none; cursor:pointer;
+}
+.speed-range::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none;
+  width:15px; height:15px; border-radius:50%;
+  background:var(--blue); border:2px solid var(--card);
+  cursor:pointer; transition:transform .15s ease;
+}
+.speed-range::-webkit-slider-thumb:hover{ transform:scale(1.25); }
+.speed-range::-moz-range-thumb{
+  width:15px; height:15px; border-radius:50%;
+  background:var(--blue); border:2px solid var(--card); cursor:pointer;
+}
+
+.btn-head{
+  display:inline-flex; align-items:center; gap:8px;
+  border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600;
+  cursor:pointer; transition:background .25s ease, border-color .25s ease, transform .2s ease;
+  font-family:var(--font-body);
+  background:var(--panel); border:1px solid var(--line-2); color:var(--text);
+}
+.btn-head .icon{ width:16px; height:16px; }
+.btn-head:hover{ background:var(--elev); border-color:#8a8a8a66; transform:translateY(-1px); }
+.btn-head:active{ transform:scale(.96); }
+.btn-head:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+.btn-icon{ padding:9px 11px; }
+
+.layout{ display:grid; grid-template-columns:60% 40%; gap:18px; margin-top:22px; }
+.card-panel{
+  background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:20px; box-shadow:var(--panel-shadow);
+}
+.panel-title{
+  font-size:12px; text-transform:uppercase; letter-spacing:.18em;
+  color:var(--muted); font-weight:700; display:flex; align-items:center; gap:8px;
+  margin-bottom:14px;
+}
+.panel-title::before{ content:""; width:8px; height:8px; background:var(--blue); border-radius:2px; }
+.panel-title .hint{ margin-left:auto; text-transform:none; letter-spacing:0; font-weight:500; font-size:11.5px; font-family:var(--font-mono); }
+
+.stage{ display:flex; flex-direction:column; gap:16px; }
+.video-card{
+  position:relative; border-radius:14px; overflow:hidden;
+  min-height:330px; display:flex; flex-direction:column;
+  justify-content:flex-end; padding:22px;
+  background:linear-gradient(165deg, var(--vcard-a) 0%, var(--vcard-b) 100%);
+  border:1px solid var(--line);
+  transition:opacity .3s ease, transform .3s ease;
+}
+.video-card::before{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(circle at 50% 32%, var(--vcard-spot), transparent 55%);
+  pointer-events:none;
+}
+.video-card.out{ opacity:0; transform:translateY(14px) scale(.97); }
+
+.video-card.glitch-in{ animation: glitchFlicker .45s ease-out; }
+.video-card.glitch-in .video-icon{
+  filter:
+    drop-shadow(-3px 0 0 rgba(255, 48, 64, .7))
+    drop-shadow(3px 0 0 rgba(0, 149, 246, .7));
+}
+.video-card.glitch-in .video-title{
+  text-shadow: -2px 0 rgba(255,48,64,.5), 2px 0 rgba(0,149,246,.5);
+}
+@keyframes glitchFlicker{
+  0%   { transform:translateX(-4px) skewX(-3deg); opacity:.6; }
+  15%  { transform:translateX(3px)  skewX(2deg);  opacity:1; }
+  30%  { transform:translateX(-2px) skewX(-1deg); opacity:.8; }
+  50%  { transform:translateX(1px);               opacity:1; }
+  70%  { transform:translateX(-1px) skewX(.5deg); }
+  100% { transform:none; }
+}
+
+.video-icon{
+  position:absolute; top:42%; left:50%; transform:translate(-50%,-50%);
+  width:clamp(88px, 12vw, 128px); height:clamp(88px, 12vw, 128px);
+  color:var(--vicon); stroke-width:1.5; pointer-events:none;
+  filter:var(--vicon-glow);
+  animation:breathe 4.5s ease-in-out infinite;
+}
+@keyframes breathe{ 50%{ transform:translate(-50%,-54%) scale(1.035);} }
+
+.chips{ position:absolute; top:14px; left:14px; right:14px; display:flex; gap:8px; flex-wrap:wrap; }
+.chip{
+  background:var(--chip-bg); border:1px solid var(--chip-line); border-radius:999px;
+  padding:5px 12px; font-size:12px; font-weight:600; color:var(--chip-fg);
+  display:flex; align-items:center; gap:7px;
+}
+.chip .rec-dot{ width:7px; height:7px; border-radius:50%; background:var(--down); animation:rec 1.6s infinite; }
+.chip .icon{ width:13px; height:13px; }
+.chip.score{ font-family:var(--font-mono); }
+.chip.score b{ color:var(--text); }
+
+.video-body{ position:relative; z-index:1; }
+.video-title{ font-size:clamp(19px, 2.3vw, 26px); font-weight:700; line-height:1.25; text-shadow:var(--title-shadow); }
+.video-meta{ display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:10px; font-size:13px; color:var(--muted); }
+.vmeta{ display:inline-flex; align-items:center; gap:6px; }
+.vmeta .icon{ width:14px; height:14px; }
+.tag-badge{
+  display:inline-flex; align-items:center; gap:7px; padding:4px 12px;
+  border-radius:999px; font-weight:700; font-size:13px; color:var(--text);
+  background:var(--chip-bg); border:1px solid var(--chip-line);
+}
+.tag-badge .tdot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.progress{ margin-top:14px; height:4px; border-radius:2px; background:rgba(127,127,127,.3); overflow:hidden; }
+.progress i{ display:block; height:100%; width:0; border-radius:2px; background:var(--text); animation:play 15s linear infinite; }
+@keyframes play{ to{ width:100%; } }
+.video-card.watched .progress i{ animation:none; width:100%; transition:width .5s ease; }
+
+.controls{ display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+.action-btn{
+  position:relative; overflow:hidden; cursor:pointer;
+  padding:14px 10px 12px; border-radius:12px; color:var(--text);
+  background:var(--panel); border:1px solid var(--line-2);
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  font-family:var(--font-body); font-weight:700; font-size:14px;
+  transition:background .25s ease, border-color .25s ease, transform .2s ease, box-shadow .25s ease;
+}
+.action-btn .ico{ transition:transform .25s ease; line-height:0; }
+.action-btn .ico .icon{ width:24px; height:24px; }
+.action-btn .delta{ font-family:var(--font-mono); font-size:11px; font-weight:600; }
+.action-btn.like .delta, .action-btn.repost .delta, .action-btn.watch .delta{ color:var(--up); opacity:.85; }
+.action-btn.skip .delta{ color:var(--down); opacity:.85; }
+.action-btn:hover{ background:var(--elev); transform:translateY(-2px); }
+.action-btn:hover .ico{ transform:scale(1.15); }
+.action-btn:active{ transform:scale(.96); }
+.action-btn:disabled{ opacity:.45; pointer-events:none; }
+.action-btn:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+.action-btn svg{ pointer-events:none; }
+
+.action-btn.selected{ background:var(--elev); border-color:var(--blue); box-shadow:0 0 0 1.5px var(--blue); }
+.action-btn.skip.selected{ border-color:var(--down); box-shadow:0 0 0 1.5px var(--down); }
+.action-btn .check{
+  position:absolute; top:7px; right:7px; width:16px; height:16px; border-radius:50%;
+  background:var(--blue); color:#fff; display:none; place-items:center;
+}
+.action-btn .check .icon{ width:10px; height:10px; stroke-width:3.2; }
+.action-btn.selected .check{ display:grid; }
+.action-btn.skip.selected .check{ background:var(--down); }
+
+.confirm-btn{
+  display:flex; align-items:center; justify-content:center; gap:9px; width:100%;
+  border:none; border-radius:12px; padding:13px; cursor:pointer;
+  font-family:var(--font-body); font-size:15px; font-weight:700;
+  background:var(--blue); color:#fff;
+  transition:background .25s ease, transform .2s ease, opacity .25s ease;
+}
+.confirm-btn .icon{ width:17px; height:17px; }
+.confirm-btn span{ font-family:var(--font-mono); font-size:14px; }
+.confirm-btn:hover:not(:disabled){ background:#1877f2; transform:translateY(-1px); }
+.confirm-btn:active:not(:disabled){ transform:scale(.98); }
+.confirm-btn:disabled{ opacity:.35; cursor:default; }
+
+.ripple{
+  position:absolute; border-radius:50%; background:var(--ripple);
+  transform:scale(0); animation:ripple .55s ease-out forwards; pointer-events:none;
+}
+@keyframes ripple{ to{ transform:scale(3.4); opacity:0; } }
+
+.hotkeys{ margin-top:2px; font-size:12px; color:var(--muted); text-align:center; font-family:var(--font-mono); }
+.hotkeys kbd, .guide-sec kbd{
+  background:var(--panel); border:1px solid var(--line-2); border-bottom-width:2px;
+  border-radius:5px; padding:1px 6px; font-family:var(--font-mono); font-size:12px;
+}
+
+.trail{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-height:30px; margin-bottom:14px; }
+.trail-chip{
+  width:26px; height:26px; border-radius:8px; background:var(--panel);
+  border:1px solid var(--line); display:grid; place-items:center;
+  animation:pop2 .3s ease both;
+}
+@keyframes pop2{ from{ opacity:0; transform:scale(.5);} }
+.trail-chip .icon{ width:14px; height:14px; }
+.trail-arrow{ color:var(--muted); font-size:13px; }
+
+.lane-board{ position:relative; }
+.root-chip{
+  display:flex; align-items:center; gap:10px; width:100%;
+  background:var(--panel); border:1px solid var(--line-2);
+  border-left:3px solid var(--line-2); border-radius:12px; padding:10px 12px;
+}
+.root-ico{ width:36px; height:36px; border-radius:10px; background:var(--elev); display:grid; place-items:center; flex:none; }
+.root-ico .icon{ width:19px; height:19px; }
+.root-txt{ display:flex; flex-direction:column; min-width:0; flex:1; }
+.root-txt b{ font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.root-txt i{ font-style:normal; font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+.root-tag{
+  font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--blue); border:1px solid var(--blue); border-radius:999px; padding:3px 8px; flex:none;
+}
+
+.lane-cands{ display:flex; flex-direction:column; gap:10px; margin-top:16px; padding-left:64px; }
+.cand{
+  display:flex; align-items:center; gap:10px;
+  background:var(--panel); border:1px solid var(--line);
+  border-left:3px solid var(--line-2); border-radius:12px; padding:9px 12px;
+  transition:opacity .35s ease, box-shadow .3s ease, border-color .3s ease, background .25s ease;
+  animation:candIn .5s ease both; animation-delay:calc(var(--i)*80ms);
+}
+.cand:hover{ background:var(--elev); }
+@keyframes candIn{ from{ opacity:0; } }
+.cand-ico{ width:30px; height:30px; border-radius:9px; background:var(--elev); display:grid; place-items:center; flex:none; }
+.cand-ico .icon{ width:16px; height:16px; }
+.cand-txt{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.cand-txt b{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cand-txt i{ font-style:normal; font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+.cand-prob{ font-family:var(--font-mono); font-size:16px; font-weight:800; min-width:52px; text-align:right; }
+.cand.zero{ border-left-style:dashed; }
+.cand.zero .cand-prob{ color:var(--muted); }
+.cand.dim{ opacity:.28; }
+.cand.winner{ border-color:var(--wc); box-shadow:0 0 0 1.5px var(--wc); }
+
+#laneWires{ position:absolute; inset:0; pointer-events:none; overflow:visible; }
+.trunk{ stroke:var(--flat); stroke-width:3; opacity:.5; fill:none; stroke-linecap:round; }
+.trunk-dot{ fill:var(--flat); opacity:.8; }
+
+.wire{
+  fill:none; stroke-linecap:round;
+  animation:candIn .5s ease both;
+  transition:stroke-width .5s cubic-bezier(.2,.8,.3,1), opacity .3s ease;
+}
+.wire.zero{ stroke-dasharray:4 6; }
+.wire.dim{ opacity:.12 !important; }
+.wire.flow{ stroke-dasharray:6 10; animation:flow .6s linear infinite; }
+@keyframes flow{ to{ stroke-dashoffset:-64; } }
+
+/* Плашка объяснения — теперь адаптивна к теме */
+.explain{
+  margin-top:16px;
+  background: var(--explain-bg);
+  color: var(--explain-fg);
+  border:1px solid var(--explain-line);
+  border-left:5px solid var(--explain-accent);
+  border-radius:12px; padding:15px 17px; font-size:14.5px; line-height:1.6;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+}
+.explain.in{ animation:explainIn .45s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes explainIn{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:none;} }
+.explain.up{ border-left-color:var(--up); }
+.explain.down{ border-left-color:var(--down); }
+.explain b{ font-weight:800; }
+.explain .wt{ font-family:var(--font-mono); font-weight:700; }
+.explain .arrow{ opacity:.5; padding:0 2px; }
+
+.dock{ margin-top:18px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:var(--panel-shadow); }
+.dock-head{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.dock-head.mt{ margin-top:20px; }
+.dock-head .panel-title{ margin-bottom:0; }
+.dock-head .dock-sub{ font-size:12px; color:var(--muted); }
+.dock-rows{ display:flex; flex-direction:column; gap:6px; }
+
+.mrow{
+  display:grid;
+  grid-template-columns:38px 96px 1fr 66px 48px;
+  gap:14px; align-items:center;
+  padding:9px 12px; border-radius:12px;
+  transition:background .25s ease, box-shadow .3s ease;
+}
+.mrow:hover{ background:var(--panel); }
+.mrow.leader{ background:var(--panel); box-shadow:inset 0 0 0 1px var(--lc); }
+
+.m-ico{ width:36px; height:36px; border-radius:10px; display:grid; place-items:center; }
+.m-ico .icon{ width:17px; height:17px; }
+.m-name{ display:flex; align-items:center; gap:7px; min-width:0; }
+.m-name b{ font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lead-pill{
+  display:none; font-style:normal; font-size:9px; font-weight:800;
+  letter-spacing:.08em; text-transform:uppercase;
+  padding:2px 7px; border-radius:999px; flex:none;
+}
+.mrow.leader .lead-pill{ display:inline-block; }
+
+.m-track{ position:relative; height:10px; border-radius:6px; background:var(--track); overflow:hidden; }
+.m-fill{
+  position:absolute; top:0; bottom:0; left:0; width:30%;
+  border-radius:6px; transition:width .6s cubic-bezier(.2,.8,.3,1);
+}
+.m-track::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(to right,
+    transparent 0, transparent calc(10% - 1px),
+    var(--card) calc(10% - 1px), var(--card) 10%);
+}
+
+.m-num{ font-family:var(--font-mono); display:flex; align-items:baseline; gap:4px; justify-content:flex-end; }
+.m-num b{ font-size:20px; font-weight:800; line-height:1; }
+.m-num span{ color:var(--muted); font-size:11px; font-weight:600; }
+
+.m-delta{
+  font-family:var(--font-mono); font-size:12px; font-weight:800; text-align:center;
+  padding:4px 0; border-radius:8px; background:var(--panel); color:var(--muted);
+}
+.m-delta.up{ color:var(--up); background:rgba(62,201,126,.1); }
+.m-delta.down{ color:var(--down); background:rgba(255,48,64,.1); }
+.m-delta.pop{ animation:pop .4s ease; }
+
+.dock-charts{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px; }
+.chart-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:12px;
+  padding:12px 12px 10px; position:relative; overflow:visible;
+}
+.chart-head{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.chart-head b{ font-size:13.5px; }
+.chart-ico{ width:24px; height:24px; border-radius:7px; display:grid; place-items:center; flex:none; }
+.chart-ico .icon{ width:13px; height:13px; }
+.chart-now{ margin-left:auto; font-family:var(--font-mono); font-weight:800; font-size:15px; }
+.chart-svg{ width:100%; height:auto; display:block; }
+.ch-grid{ stroke:var(--line); stroke-width:1; }
+.ch-label{ fill:var(--muted); font-size:9px; font-family:var(--font-mono); text-anchor:end; }
+.ch-line{ fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+.chart-hint{
+  position:absolute; left:12px; right:12px; top:calc(100% + 8px);
+  background:var(--elev); color:var(--text);
+  border:1px solid var(--line-2); border-radius:10px;
+  padding:9px 12px; font-size:12.5px; line-height:1.45;
+  box-shadow:0 10px 24px rgba(0,0,0,.4);
+  z-index:10; opacity:0; transform:translateY(-6px);
+  animation:hintIn .35s ease forwards;
+}
+.chart-hint::before{
+  content:""; position:absolute; top:-5px; left:20px;
+  width:9px; height:9px; background:var(--elev);
+  border-left:1px solid var(--line-2); border-top:1px solid var(--line-2);
+  transform:rotate(45deg);
+}
+.chart-hint b{ font-weight:800; }
+.chart-hint .h-ico{
+  width:14px; height:14px; display:inline-block; vertical-align:-3px; margin-right:5px;
+  color:var(--blue);
+}
+.chart-hint.hide{ animation:hintOut .3s ease forwards; }
+@keyframes hintIn{ to{ opacity:1; transform:none; } }
+@keyframes hintOut{ to{ opacity:0; transform:translateY(-6px); } }
+
+.toast{
+  position:fixed; top:18px; right:18px; z-index:99; max-width:360px;
+  background:var(--elev); border:1px solid var(--line-2); border-radius:12px;
+  padding:16px 18px 16px 52px; font-size:14px; line-height:1.5; color:var(--text);
+  box-shadow:0 16px 40px rgba(0,0,0,.4);
+  animation:shakeIn .6s cubic-bezier(.2,1.2,.3,1) backwards;
+  transition:opacity .4s ease, transform .4s ease;
+}
+.toast.hide{ opacity:0; transform:translateX(40px); }
+.toast .toast-ico{ position:absolute; left:16px; top:17px; width:22px; height:22px; }
+.toast.warn .toast-ico{ color:var(--down); }
+.toast.info .toast-ico{ color:var(--blue); }
+.toast button{
+  position:absolute; top:6px; right:8px; background:none; border:none;
+  color:var(--muted); cursor:pointer; transition:color .2s; padding:4px; line-height:0;
+}
+.toast button .icon{ width:15px; height:15px; }
+.toast button:hover{ color:var(--text); }
+@keyframes shakeIn{
+  0%{ opacity:0; transform:translateX(60px); }
+  55%{ opacity:1; transform:translateX(-6px); }
+  75%{ transform:translateX(3px); }
+  100%{ opacity:1; transform:none; }
+}
+
+.modal-backdrop{
+  position:fixed; inset:0; z-index:100;
+  background:rgba(0,0,0,.65); backdrop-filter:blur(4px);
+  display:grid; place-items:center; padding:20px;
+  opacity:0; pointer-events:none; transition:opacity .3s ease;
+}
+.modal-backdrop.open{ opacity:1; pointer-events:auto; }
+.modal{
+  width:min(660px, 100%); max-height:86vh; display:flex; flex-direction:column;
+  background:var(--card); border:1px solid var(--line-2); border-radius:14px;
+  box-shadow:0 30px 80px rgba(0,0,0,.5);
+  transform:translateY(22px) scale(.96); transition:transform .35s cubic-bezier(.2,1.1,.3,1);
+}
+.modal-backdrop.open .modal{ transform:none; }
+.modal-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-bottom:1px solid var(--line); }
+.modal-head h2{
+  font-family:var(--font-display); font-size:21px; font-weight:700;
+  display:flex; align-items:center; gap:10px;
+}
+.modal-head h2 .icon{ width:21px; height:21px; color:var(--blue); }
+.modal-close{
+  background:var(--panel); border:1px solid var(--line-2); border-radius:50%;
+  width:32px; height:32px; display:grid; place-items:center; cursor:pointer;
+  color:var(--muted); transition:all .25s ease;
+}
+.modal-close:hover{ color:var(--text); transform:rotate(90deg); border-color:var(--down); }
+.modal-close .icon{ width:15px; height:15px; }
+.modal-body{ padding:20px; overflow-y:auto; font-size:14.5px; line-height:1.65; color:var(--muted); }
+.modal-body::-webkit-scrollbar{ width:8px; }
+.modal-body::-webkit-scrollbar-thumb{ background:var(--line-2); border-radius:4px; }
+.guide-sec{ margin-bottom:20px; padding-left:14px; border-left:3px solid var(--line-2); }
+.guide-sec:last-child{ margin-bottom:4px; }
+.guide-sec h3{ font-size:14px; font-weight:800; color:var(--text); margin-bottom:7px; text-transform:uppercase; letter-spacing:.06em; }
+.guide-sec ul{ padding-left:18px; }
+.guide-sec li{ margin-bottom:4px; }
+.guide-sec b{ color:var(--text); }
+.keys-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+.key-item{ display:flex; align-items:center; gap:11px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.k-ico{ width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--elev); border:1px solid var(--line-2); color:var(--text); flex:none; }
+.k-ico .icon{ width:17px; height:17px; }
+.key-item b{ display:block; font-size:14px; color:var(--text); }
+.w-badge{ font-family:var(--font-mono); font-size:11.5px; font-weight:700; padding:1px 8px; border-radius:999px; }
+.w-badge.up{ background:rgba(62,201,126,.12); color:var(--up); }
+.w-badge.down{ background:rgba(255,48,64,.12); color:var(--down); }
+.combo-note{ margin-top:10px; padding:10px 12px; border-radius:10px; background:var(--panel); border:1px dashed var(--line-2); font-size:13.5px; }
+.modal-foot{ padding:14px 20px; border-top:1px solid var(--line); }
+.btn-go{
+  width:100%; border:none; cursor:pointer; border-radius:10px; padding:13px;
+  font-family:var(--font-body); font-size:15px; font-weight:700; color:#fff;
+  background:var(--blue); transition:background .25s ease, transform .2s ease;
+}
+.btn-go:hover{ background:#1877f2; transform:translateY(-1px); }
+.btn-go:active{ transform:scale(.98); }
+
+.stat-grid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+  gap:10px; margin-bottom:18px;
+}
+.stat-kpi{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:12px 14px;
+}
+.stat-kpi .k-lbl{
+  font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); font-weight:700;
+}
+.stat-kpi .k-val{
+  font-family:var(--font-mono); font-size:24px; font-weight:800;
+  margin-top:4px; line-height:1; color:var(--text);
+}
+.stat-kpi .k-val small{ font-size:13px; color:var(--muted); font-weight:600; margin-left:4px; }
+.stat-kpi.accent{ border-color:var(--blue); }
+.stat-kpi.accent .k-val{ color:var(--blue); }
+
+.stat-sec{ margin-bottom:18px; }
+.stat-sec h4{
+  font-size:12px; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--muted); font-weight:700; margin-bottom:10px;
+}
+.stat-bars{ display:flex; flex-direction:column; gap:8px; }
+.stat-bar-row{ display:grid; grid-template-columns:92px 1fr 64px; gap:10px; align-items:center; font-size:13px; }
+.stat-bar-row .nm{ color:var(--muted); font-weight:600; display:flex; align-items:center; gap:6px; }
+.stat-bar-row .nm .icon{ width:13px; height:13px; }
+.stat-bar-track{ height:8px; border-radius:4px; background:var(--track); overflow:hidden; position:relative; }
+.stat-bar-fill{ display:block; height:100%; border-radius:4px; transition:width .6s cubic-bezier(.2,.8,.3,1); }
+.stat-bar-row b{ font-family:var(--font-mono); font-size:12.5px; text-align:right; }
+
+.insight-box{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:12px 14px; font-size:13.5px; line-height:1.55; color:var(--muted);
+}
+.insight-box b{ color:var(--text); }
+.insight-box ul{ padding-left:18px; margin-top:6px; }
+.insight-box li{ margin-bottom:3px; }
+.stat-empty{ text-align:center; color:var(--muted); font-style:italic; padding:30px 0; }
+
+@media (max-width: 980px){
+  .layout{ grid-template-columns:1fr; }
+  header{ padding-top:22px; }
+}
+@media (max-width: 700px){
+  .mrow{ grid-template-columns:38px 84px 1fr 60px 46px; gap:10px; }
+  .speed-chip{ padding:6px 10px; }
+  .speed-range{ width:68px; }
+}
+@media (max-width: 600px){
+  .controls{ grid-template-columns:1fr 1fr; }
+  .video-card{ min-height:280px; }
+  .keys-row{ grid-template-columns:1fr; }
+  .toast{ left:12px; right:12px; max-width:none; }
+  .lane-cands{ padding-left:52px; }
+}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- Интерактивный фон: плавающие линии -->
+<canvas id="bgPaths" aria-hidden="true"></canvas>
+<div class="bg-mask" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-cat" viewBox="0 0 24 24">
+      <path d="M12 5c.67 0 1.35.09 2 .26 1.78-2 5.03-2.84 6.42-2.26 1.4.58-.42 7-.42 7 .57 1.07 1 2.24 1 3.44C21 17.9 16.97 21 12 21s-9-3.1-9-7.56c0-1.25.5-2.4 1-3.44 0 0-1.89-6.42-.5-7 1.39-.58 4.72.23 6.5 2.23A9.04 9.04 0 0 1 12 5z"/>
+      <path d="M8 14v.5"/><path d="M16 14v.5"/><path d="M11.25 16.25h1.5L12 17l-.75-.75z"/>
+    </symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 7.4l4.4 3.2-1.7 5.1H9.3l-1.7-5.1z"/>
+      <path d="M12 3v4.4"/><path d="M20.6 9.2l-4.2 1.4"/><path d="M17.3 20l-2.6-4.3"/>
+      <path d="M6.7 20l2.6-4.3"/><path d="M3.4 9.2l4.2 1.4"/>
+    </symbol>
+    <symbol id="i-music" viewBox="0 0 24 24">
+      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+    </symbol>
+    <symbol id="i-gamepad" viewBox="0 0 24 24">
+      <path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59C2.6 9.42 2 14.46 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.42.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.54-.6-6.58-.68-7.26A4 4 0 0 0 17.32 5z"/>
+      <path d="M6 12h4"/><path d="M8 10v4"/><path d="M15 13h.01"/><path d="M18 11h.01"/>
+    </symbol>
+    <symbol id="i-news" viewBox="0 0 24 24">
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/>
+      <path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6z"/>
+    </symbol>
+    <symbol id="i-door" viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><path d="M2 21h20"/><path d="M13.5 12h.01"/></symbol>
+    <symbol id="i-paw" viewBox="0 0 24 24">
+      <circle cx="6" cy="7.5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="18" cy="7.5" r="2"/>
+      <path d="M12 10.5c-3.2 0-6.2 2.6-6.2 5.6 0 2 1.7 3.4 6.2 3.4s6.2-1.4 6.2-3.4c0-3-3-5.6-6.2-5.6z"/>
+    </symbol>
+    <symbol id="i-fish" viewBox="0 0 24 24">
+      <path d="M6 12c2.5-4 6-6 11-6 2 2 2 10 0 12-5 0-8.5-2-11-6z"/><path d="M6 12L2 9v6l4-3z"/><circle cx="13.5" cy="10" r=".5"/>
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+      <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
+    </symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+    <symbol id="i-bike" viewBox="0 0 24 24">
+      <circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/>
+      <path d="M6 17l4-8h5l3 8"/><path d="M10 9L8.5 6H6"/><path d="M13 6h2.5"/>
+    </symbol>
+    <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.11"/></symbol>
+    <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M6.5 6.5v11"/><path d="M3.5 9v6"/><path d="M17.5 6.5v11"/><path d="M20.5 9v6"/><path d="M6.5 12h11"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 9c2.5-3 5-3 7.5 0s5 3 7.5 0"/><path d="M2 16c2.5-3 5-3 7.5 0s5 3 7.5 0"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v4"/>
+    </symbol>
+    <symbol id="i-piano" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 19v-7"/><path d="M12 19v-7"/><path d="M16.5 19v-7"/></symbol>
+    <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24">
+      <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+    </symbol>
+    <symbol id="i-radio" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="2"/>
+      <path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
+    </symbol>
+    <symbol id="i-ffwd" viewBox="0 0 24 24"><path d="M13 19l9-7-9-7v14z"/><path d="M2 19l9-7-9-7v14z"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+    </symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-skull" viewBox="0 0 24 24">
+      <path d="M12 2a8 8 0 0 0-8 8c0 2.9 1.6 5.4 4 6.8V20a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3.2c2.4-1.4 4-3.9 4-6.8a8 8 0 0 0-8-8z"/>
+      <circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/><path d="M12 15v2"/>
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4.5"/>
+      <path d="M12 2v2.5"/><path d="M12 19.5V22"/><path d="M4.9 4.9l1.8 1.8"/><path d="M17.3 17.3l1.8 1.8"/>
+      <path d="M2 12h2.5"/><path d="M19.5 12H22"/><path d="M4.9 19.1l1.8-1.8"/><path d="M17.3 6.7l1.8-1.8"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24">
+      <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+      <path d="M9 1v3"/><path d="M15 1v3"/><path d="M9 20v3"/><path d="M15 20v3"/>
+      <path d="M1 9h3"/><path d="M1 15h3"/><path d="M20 9h3"/><path d="M20 15h3"/>
+    </symbol>
+    <symbol id="i-leaf" viewBox="0 0 24 24">
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+    </symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </symbol>
+    <symbol id="i-thumbs" viewBox="0 0 24 24">
+      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/>
+      <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+    </symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24">
+      <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 4l10 8-10 8V4z"/><path d="M19 5v14"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <path d="M12 9v4"/><path d="M12 17h.01"/>
+    </symbol>
+    <symbol id="i-help" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-stats" viewBox="0 0 24 24">
+      <path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>
+    </symbol>
+    <symbol id="i-speed" viewBox="0 0 24 24">
+      <path d="M12 12l3.5-6.5"/>
+      <path d="M20.8 12A8.8 8.8 0 0 0 3.2 12"/>
+      <circle cx="12" cy="12" r="2"/>
+    </symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <div class="eyebrow"><span class="dot"></span> live · модель весов активна</div>
+      <h1>Симулятор <em>рекомендательного</em> алгоритма</h1>
+      <p class="subtitle">Взаимодействуй с контентом и наблюдай, как алгоритм формирует твою ленту</p>
+    </div>
+    <div class="head-controls">
+      <div class="counter-chip" id="counterChip">Действий: <b id="actCount">0</b></div>
+
+      <div class="speed-chip" title="Скорость обучения алгоритма: множитель эффекта каждого действия">
+        <span class="speed-lbl">Скорость обучения</span>
+        <svg class="icon"><use href="#i-speed"/></svg>
+        <input type="range" id="speedRange" class="speed-range" min="0" max="3" step="1" value="1">
+        <b id="speedLabel">×1</b>
+      </div>
+
+      <button class="btn-head" id="statsBtn" title="Посмотреть статистику сессии">
+        <svg class="icon"><use href="#i-stats"/></svg> Статистика
+      </button>
+      <button class="btn-head btn-icon" id="themeBtn" title="Переключить тему" aria-label="Переключить тему">
+        <svg class="icon"><use id="themeIcon" href="#i-sun"/></svg>
+      </button>
+      <button class="btn-head" id="helpBtn" title="Открыть инструкцию">
+        <svg class="icon"><use href="#i-help"/></svg> Руководство
+      </button>
+      <button class="btn-head" id="resetBtn" title="Вернуть веса к начальным (клавиша R)">
+        <svg class="icon"><use href="#i-reset"/></svg> Сбросить
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <section class="card-panel stage">
+      <div class="panel-title">Сейчас в ленте</div>
+
+      <div class="video-card" id="videoCard">
+        <div class="chips">
+          <span class="chip"><span class="rec-dot"></span>REC · рекомендовано для тебя</span>
+          <span class="chip score">
+            <svg class="icon"><use href="#i-gauge"/></svg> скоринг <b id="scoreText">—</b>
+          </span>
+        </div>
+        <svg class="icon video-icon"><use id="vIconUse" href="#i-cat"/></svg>
+        <div class="video-body">
+          <div class="video-title" id="vTitle">…</div>
+          <div class="video-meta">
+            <span class="tag-badge"><i class="tdot" id="vTagDot"></i><span id="vTagText">коты</span></span>
+            <span class="vmeta"><svg class="icon"><use href="#i-clock"/></svg><span id="vDur">0:30</span></span>
+            <span class="vmeta"><svg class="icon"><use href="#i-eye"/></svg><span id="vViews">0 просмотров</span></span>
+          </div>
+          <div class="progress"><i></i></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="action-btn like" data-act="like" title="Клавиша 1" aria-pressed="false">
+          <span class="check"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span class="ico"><svg class="icon"><use href="#i-thumbs"/></svg></span>Лайк<span class="delta">вес +2</span>
+        </button>
+        <button class="action-btn repost" data-act="repost" title="Клавиша 2" aria-pressed="false">
+          <span class="check"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span class="ico"><svg class="icon"><use href="#i-repeat"/></svg></span>Репост<span class="delta">вес +1</span>
+        </button>
+        <button class="action-btn watch" data-act="watch" title="Клавиша 3" aria-pressed="false">
+          <span class="check"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span class="ico"><svg class="icon"><use href="#i-play"/></svg></span>Досмотреть<span class="delta">вес +3</span>
+        </button>
+        <button class="action-btn skip" data-act="skip" title="Клавиша 4 · не совмещается с другими" aria-pressed="false">
+          <span class="check"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span class="ico"><svg class="icon"><use href="#i-skip"/></svg></span>Пропустить<span class="delta">вес −1</span>
+        </button>
+      </div>
+
+      <button class="confirm-btn" id="confirmBtn" disabled title="Space">
+        <svg class="icon"><use href="#i-check"/></svg>
+        <span id="confirmLabel">Выбери действия</span>
+      </button>
+      <div class="hotkeys"><kbd>1</kbd>–<kbd>4</kbd> — действия · <kbd>Space</kbd> — подтвердить · <kbd>R</kbd> — сброс</div>
+    </section>
+
+    <aside class="card-panel">
+      <div class="panel-title">Путь рекомендации <span class="hint">шире ветка — выше шанс</span></div>
+
+      <div class="trail" id="trailChips"></div>
+
+      <div class="lane-board" id="laneBoard">
+        <div class="root-chip" id="rootChip">
+          <span class="root-ico"><svg class="icon"><use id="rootIconUse" href="#i-cat"/></svg></span>
+          <span class="root-txt"><b id="rootTitle">…</b><i id="rootMeta">…</i></span>
+          <span class="root-tag">сейчас</span>
+        </div>
+        <svg id="laneWires"></svg>
+        <div class="lane-cands" id="laneCands"></div>
+      </div>
+
+      <div class="explain" id="explain" aria-live="polite">
+        Собери комбинацию действий под видео и нажми «Подтвердить».
+        Ветки справа показывают кандидатов на следующий показ: чем толще ветка, тем выше шанс.
+      </div>
+    </aside>
+  </main>
+
+  <section class="dock">
+    <div class="dock-head">
+      <div class="panel-title">Веса тем · память алгоритма</div>
+      <span class="dock-sub">шкала 0–10 · чип справа — последнее изменение</span>
+    </div>
+    <div class="dock-rows" id="dockRows"></div>
+
+    <div class="dock-head mt">
+      <div class="panel-title">Динамика весов</div>
+      <span class="dock-sub">как менялся интерес алгоритма к каждой теме</span>
+    </div>
+    <div class="dock-charts" id="dockCharts"></div>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="statsBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
+    <div class="modal-head">
+      <h2 id="statsTitle"><svg class="icon"><use href="#i-stats"/></svg> Статистика сессии</h2>
+      <button class="modal-close" id="statsClose" aria-label="Закрыть"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-body" id="statsBody"></div>
+    <div class="modal-foot"><button class="btn-go" id="statsGo">Закрыть</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle"><svg class="icon"><use href="#i-help"/></svg> Руководство по симулятору</h2>
+      <button class="modal-close" id="modalClose" aria-label="Закрыть"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+
+    <div class="modal-body">
+      <div class="guide-sec">
+        <h3>Что это вообще такое</h3>
+        <p>Интерактивная модель <b>ленты рекомендаций</b>. Ты — пользователь, алгоритм — весовая модель из пяти тем.
+        Каждое действие меняет «интерес» алгоритма, и следующее видео подбирается уже по новой картине.
+        Никаких сценариев — всё зависит только от твоих кликов.</p>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Как читать «Путь рекомендации»</h3>
+        <ul>
+          <li>Верхняя карточка — <b>текущее видео</b>. Из неё вниз идёт ствол, от которого расходятся ветки к четырём кандидатам.</li>
+          <li><b>Толщина ветки = вероятность</b>. Она пропорциональна весу тега кандидата.</li>
+          <li>После твоего действия ветки мгновенно меняют толщину и проценты.</li>
+          <li>Выбранная ветка подсвечивается бегущим потоком, видео слева сменяется, дерево строится заново.</li>
+          <li>Пунктирная ветка с 0% — тема с нулевым весом: она почти не показывается.</li>
+        </ul>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Кнопки действий</h3>
+        <div class="keys-row">
+          <div class="key-item"><span class="k-ico"><svg class="icon"><use href="#i-thumbs"/></svg></span><div><b>Лайк</b><span class="w-badge up">+2 к весу</span></div></div>
+          <div class="key-item"><span class="k-ico"><svg class="icon"><use href="#i-repeat"/></svg></span><div><b>Репост</b><span class="w-badge up">+1 к весу</span></div></div>
+          <div class="key-item"><span class="k-ico"><svg class="icon"><use href="#i-play"/></svg></span><div><b>Досмотреть</b><span class="w-badge up">+3 к весу</span></div></div>
+          <div class="key-item"><span class="k-ico"><svg class="icon"><use href="#i-skip"/></svg></span><div><b>Пропустить</b><span class="w-badge down">−1 к весу</span></div></div>
+        </div>
+        <div class="combo-note">
+          Кнопки работают как <b>переключатели</b>: собери комбинацию и нажми <b>«Подтвердить»</b>.
+          Веса действий складываются. <b>«Пропустить» не совмещается</b> с остальными.
+        </div>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Скорость обучения (ползунок в шапке)</h3>
+        <p>Множитель эффекта действий: <b>×0.5</b> — алгоритм учится медленно,
+        <b>×3</b> — каждое действие даёт тройной эффект, пузырь формируется за несколько кликов.
+        Попробуй обе крайности, чтобы почувствовать, как агрессивность рекомендаций влияет на разнообразие.</p>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Панель весов и графики</h3>
+        <p>Сверху — компактные строки весов, ниже — отдельные графики динамики каждой темы.
+        Если вес впервые падает до 0 или поднимается до 10, рядом с графиком появится <b>подсказка</b>,
+        а вверху экрана — <b>уведомление</b>.</p>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Фильтрующий пузырь</h3>
+        <p>Если после <b>10+ действий</b> вес одной темы достигнет <b>8 и выше</b>, появится предупреждение:
+        лента «схлопнулась» в одну тему. Нажми <b>«Сбросить»</b> или разбавь её другими темами.</p>
+      </div>
+
+      <div class="guide-sec">
+        <h3>Управление</h3>
+        <p><kbd>1</kbd> — лайк · <kbd>2</kbd> — репост · <kbd>3</kbd> — досмотреть · <kbd>4</kbd> — пропустить ·
+        <kbd>Space</kbd> — подтвердить · <kbd>R</kbd> — сброс.</p>
+      </div>
+    </div>
+
+    <div class="modal-foot"><button class="btn-go" id="modalGo">Понятно, поехали!</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   ФОН: «Потоки» — интерактивные линии (портировано с kokonutui)
+   ============================================================ */
+(function initBackgroundPaths(){
+  const canvas = document.getElementById("bgPaths");
+  const ctx = canvas.getContext("2d");
+  if (!canvas || !ctx) return;
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const LAYERS = [
+    { width: 1,    opacity: 0.16, phase: 0.6, pace: 0.7,  part: 0.45 },
+    { width: 1.25, opacity: 0.26, phase: 0.3, pace: 0.85, part: 0.75 },
+    { width: 1.5,  opacity: 0.4,  phase: 0,   pace: 1,    part: 1    },
+  ];
+  const COUNT = 36;
+  const SPREAD = 1;
+  const ANGLE = -8; // градусы
+  const SPEED = reduceMotion ? 0 : 1;
+  const INTERACTIVE = !reduceMotion;
+  const SAMPLES = 64;
+  const OVERSCAN = 0.06;
+  const PART_RADIUS = 150;
+  const PART_PUSH = 56;
+  const DRAW_MS = 1400;
+  const DRAW_STAGGER_MS = 40;
+
+  const slope = Math.tan(ANGLE * Math.PI / 180);
+  const perLayer = Math.max(1, Math.round(COUNT / LAYERS.length));
+  const total = perLayer * LAYERS.length;
+
+  const frame = {
+    width: 0, height: 0,
+    time: reduceMotion ? 40 : 40,
+    drawn: new Array(total).fill(reduceMotion ? 1 : 0),
+    pointer: { x: 0, y: 0, amount: 0, on: false }
+  };
+
+  let color = getComputedStyle(canvas).color;
+  let start = 0, last = 0, raf = 0, visible = true;
+
+  function lineY(s, u, layer, band){
+    const t = frame.time * layer.pace;
+    const x = u * frame.width;
+    const center = frame.height * 0.5
+      + slope * (x - frame.width / 2)
+      + band * 0.1 * Math.sin(Math.PI * 2 * (0.75 * u + 0.1) + layer.phase + t * 0.35);
+    const turn = 0.22 + 0.09 * Math.sin(t * 0.21 + layer.phase);
+    const breathe = 0.3 * Math.sin(t * 0.5 + s * 4 + layer.phase);
+    const twist = Math.cos(Math.PI * (u - turn) + s * (0.6 + breathe) + layer.phase);
+    return center + s * SPREAD * band * twist;
+  }
+
+  function partY(x, y, strength){
+    const p = frame.pointer;
+    if (p.amount < 0.001) return y;
+    const dx = x - p.x;
+    const dy = y - p.y;
+    const falloff = Math.exp(-(dx*dx + dy*dy) / (PART_RADIUS*PART_RADIUS));
+    const side = dy / (Math.abs(dy) + 24);
+    return y + side * falloff * PART_PUSH * strength * p.amount;
+  }
+
+  function paint(){
+    const { width, height } = frame;
+    ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const band = Math.min(height, width * 1.1);
+    const xs = new Float32Array(SAMPLES + 1);
+    const ys = new Float32Array(SAMPLES + 1);
+
+    LAYERS.forEach((layer, layerIndex) => {
+      ctx.lineWidth = layer.width;
+      for (let i = 0; i < perLayer; i++){
+        const drawn = frame.drawn[layerIndex * perLayer + i] ?? 1;
+        if (drawn <= 0) continue;
+        const s = perLayer === 1 ? 0 : i / (perLayer - 1) - 0.5;
+        const last = Math.max(1, Math.ceil(SAMPLES * drawn));
+        for (let k = 0; k <= last; k++){
+          const u = -OVERSCAN + (k / SAMPLES) * (1 + OVERSCAN * 2);
+          const x = u * width;
+          const y = lineY(s, u, layer, band);
+          xs[k] = x;
+          ys[k] = INTERACTIVE ? partY(x, y, layer.part) : y;
+        }
+        ctx.globalAlpha = layer.opacity * (0.45 + 0.55 * (1 - Math.abs(s) * 2));
+        ctx.beginPath();
+        ctx.moveTo(xs[0], ys[0]);
+        for (let k = 1; k < last; k++){
+          const mx = (xs[k] + xs[k + 1]) / 2;
+          const my = (ys[k] + ys[k + 1]) / 2;
+          ctx.quadraticCurveTo(xs[k], ys[k], mx, my);
+        }
+        ctx.lineTo(xs[last], ys[last]);
+        ctx.stroke();
+      }
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  const EASE_OUT = (t) => 1 - Math.pow(1 - t, 3);
+
+  function resize(){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    frame.width = rect.width;
+    frame.height = rect.height;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paint();
+  }
+
+  function loop(now){
+    raf = 0;
+    if (!start){ start = now; last = now; }
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    frame.time += dt * SPEED;
+
+    const elapsed = now - start;
+    for (let i = 0; i < frame.drawn.length; i++){
+      if (frame.drawn[i] < 1){
+        const local = (elapsed - (i % perLayer) * DRAW_STAGGER_MS) / DRAW_MS;
+        frame.drawn[i] = EASE_OUT(Math.min(Math.max(local, 0), 1));
+      }
+    }
+    frame.pointer.amount += ((frame.pointer.on ? 1 : 0) - frame.pointer.amount) * 0.08;
+
+    paint();
+
+    const settling =
+      frame.drawn.some((d) => d < 1) ||
+      (frame.pointer.amount > 0.001 && !frame.pointer.on) ||
+      frame.pointer.on;
+    if (visible && (SPEED > 0 || settling)){
+      raf = requestAnimationFrame(loop);
+    }
+  }
+
+  function play(){
+    if (!raf && visible && !reduceMotion){
+      last = performance.now();
+      raf = requestAnimationFrame(loop);
+    }
+  }
+
+  resize();
+  canvas.style.opacity = "1";
+
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+
+  const intersection = new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting && !document.hidden;
+    if (visible) play();
+  });
+  intersection.observe(canvas);
+
+  const onVisibility = () => {
+    visible = !document.hidden;
+    if (visible) play();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  // Периодически перечитываем цвет — реагирует на смену темы
+  const colorTimer = window.setInterval(() => {
+    const next = getComputedStyle(canvas).color;
+    if (next !== color){
+      color = next;
+      paint();
+    }
+  }, 500);
+
+  // Мгновенная перерисовка при смене темы через data-theme
+  const themeObserver = new MutationObserver(() => {
+    const next = getComputedStyle(canvas).color;
+    if (next !== color){
+      color = next;
+      paint();
+    }
+  });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const onMove = (event) => {
+    if (event.pointerType !== "mouse" || !INTERACTIVE) return;
+    const rect = canvas.getBoundingClientRect();
+    frame.pointer.x = event.clientX - rect.left;
+    frame.pointer.y = event.clientY - rect.top;
+    frame.pointer.on = true;
+    play();
+  };
+  const onLeave = () => {
+    frame.pointer.on = false;
+    play();
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerleave", onLeave);
+
+  play();
+
+  // Очистка не требуется — страница долгоживущая
+})();
+
+/* ============================================================
+   ЛОГИКА СИМУЛЯТОРА
+   ============================================================ */
+const TAGS = {
+  "коты":    { icon:"i-cat",     color:"#d9a441" },
+  "спорт":   { icon:"i-ball",    color:"#3fbf7f" },
+  "музыка":  { icon:"i-music",   color:"#bd7bb8" },
+  "игры":    { icon:"i-gamepad", color:"#54b8d8" },
+  "новости": { icon:"i-news",    color:"#dd8a4d" },
+};
+const TAG_NAMES = Object.keys(TAGS);
+
+const VIDEOS = [
+  { title:"Котёнок играет с клубком",            icon:"i-cat",      tag:"коты",    dur:"0:32", views:"1,2 млн" },
+  { title:"Кот научился открывать двери",        icon:"i-door",     tag:"коты",    dur:"0:47", views:"860 тыс" },
+  { title:"20 котиков против одного пылесоса",   icon:"i-paw",      tag:"коты",    dur:"1:12", views:"3,4 млн" },
+  { title:"Кот против огурца",                   icon:"i-zap",      tag:"коты",    dur:"0:19", views:"9,1 млн" },
+  { title:"Кот украл рыбку со стола",            icon:"i-fish",     tag:"коты",    dur:"0:41", views:"720 тыс" },
+  { title:"Ночной тыгыг по квартире",            icon:"i-moon",     tag:"коты",    dur:"0:58", views:"1,8 млн" },
+  { title:"Кот подружился с щенком",             icon:"i-heart",    tag:"коты",    dur:"1:04", views:"5,6 млн" },
+  { title:"Кот в коробке втрое меньше него",     icon:"i-box",      tag:"коты",    dur:"0:27", views:"2,3 млн" },
+  { title:"Гол в финале Лиги Чемпионов",         icon:"i-trophy",   tag:"спорт",   dur:"0:58", views:"5,1 млн" },
+  { title:"Нокаут на последних секундах боя",    icon:"i-zap",      tag:"спорт",   dur:"1:34", views:"2,7 млн" },
+  { title:"Финиш марафона: новый рекорд",        icon:"i-activity", tag:"спорт",   dur:"2:05", views:"940 тыс" },
+  { title:"Велотрюк на крыше небоскрёба",        icon:"i-bike",     tag:"спорт",   dur:"1:11", views:"3,9 млн" },
+  { title:"Тренировка чемпиона: 5 утра",         icon:"i-award",    tag:"спорт",   dur:"2:30", views:"610 тыс" },
+  { title:"Жим, который никто не повторит",      icon:"i-dumbbell", tag:"спорт",   dur:"0:52", views:"1,4 млн" },
+  { title:"Сёрфер и волна высотой с дом",        icon:"i-wave",     tag:"спорт",   dur:"1:47", views:"7,2 млн" },
+  { title:"Фотофиниш: кто быстрее?",             icon:"i-flag",     tag:"спорт",   dur:"0:36", views:"880 тыс" },
+  { title:"Уличный скрипач остановил город",     icon:"i-music",    tag:"музыка",  dur:"1:48", views:"4,0 млн" },
+  { title:"Стадион на 100 000 голосов",          icon:"i-mic",      tag:"музыка",  dur:"2:22", views:"6,3 млн" },
+  { title:"Трек, написанный за один вечер",      icon:"i-piano",    tag:"музыка",  dur:"3:10", views:"780 тыс" },
+  { title:"Диджей-сет на крыше на закате",       icon:"i-disc",     tag:"музыка",  dur:"2:54", views:"1,1 млн" },
+  { title:"В наушниках: звук за миллион",        icon:"i-headphones",tag:"музыка", dur:"1:29", views:"540 тыс" },
+  { title:"Радио поймало будущий хит",           icon:"i-radio",    tag:"музыка",  dur:"0:49", views:"320 тыс" },
+  { title:"Хор запел прямо на мосту",            icon:"i-mic",      tag:"музыка",  dur:"1:56", views:"2,2 млн" },
+  { title:"Скрипка в переходе метро",            icon:"i-music",    tag:"музыка",  dur:"1:12", views:"990 тыс" },
+  { title:"Мировой рекорд по спидрану",          icon:"i-ffwd",     tag:"игры",    dur:"1:59", views:"1,9 млн" },
+  { title:"Клатч 1 в 5 в гранд-финале",          icon:"i-flame",    tag:"игры",    dur:"0:44", views:"7,8 млн" },
+  { title:"Инди-игра, которую сделал стример",   icon:"i-code",     tag:"игры",    dur:"2:41", views:"620 тыс" },
+  { title:"Спидран с закрытыми глазами",        icon:"i-eye",      tag:"игры",    dur:"1:33", views:"2,6 млн" },
+  { title:"Мобилка на скучном созвоне",          icon:"i-phone",    tag:"игры",    dur:"0:26", views:"1,3 млн" },
+  { title:"Босс, которого никто не побеждал",    icon:"i-skull",    tag:"игры",    dur:"3:05", views:"4,4 млн" },
+  { title:"Ретро-консоль с барахолки",           icon:"i-gamepad",  tag:"игры",    dur:"2:18", views:"470 тыс" },
+  { title:"Киберарена: рёв трибун",              icon:"i-trophy",   tag:"игры",    dur:"1:07", views:"3,1 млн" },
+  { title:"Город перешёл на солнечную энергию",  icon:"i-sun",      tag:"новости", dur:"1:26", views:"410 тыс" },
+  { title:"Учёные нашли новый вид лисиц",        icon:"i-search",   tag:"новости", dur:"1:05", views:"890 тыс" },
+  { title:"Рынки растут: что это значит",        icon:"i-trend",    tag:"новости", dur:"2:14", views:"350 тыс" },
+  { title:"Робот научился рисовать",             icon:"i-chip",     tag:"новости", dur:"1:38", views:"1,6 млн" },
+  { title:"Город посадил миллион деревьев",      icon:"i-leaf",     tag:"новости", dur:"1:19", views:"760 тыс" },
+  { title:"Штормовое предупреждение на выходные",icon:"i-cloud",    tag:"новости", dur:"0:43", views:"2,0 млн" },
+  { title:"Прямое включение с места событий",    icon:"i-camera",   tag:"новости", dur:"0:57", views:"1,2 млн" },
+  { title:"Утренний эфир: новости за 60 секунд", icon:"i-clock",    tag:"новости", dur:"1:00", views:"530 тыс" },
+];
+VIDEOS.forEach((v,i)=> v.id = i);
+
+const ACTIONS = {
+  like:   { delta:+2, verb:"лайкнул(а)",   short:"лайк"    },
+  repost: { delta:+1, verb:"репостнул(а)", short:"репост"  },
+  watch:  { delta:+3, verb:"досмотрел(а)", short:"досмотр" },
+  skip:   { delta:-1, verb:"пропустил(а)", short:"пропуск" },
+};
+const ACTION_ORDER = ["like","repost","watch","skip"];
+const SPEED_STEPS = [0.5, 1, 2, 3];
+
+const state = {
+  weights:{}, prevWeights:{},
+  current:null, actions:0,
+  shown:{}, spark:{}, trail:[],
+  lane:[], laneEls:[], wireEls:[],
+  bubbleTag:null, locked:false,
+  speedIdx: 1,
+  log: [],
+  firstZero: new Set(),
+  firstMax:  new Set(),
+  bubbleAt: null,
+};
+const selection = new Set();
+let modalOpen = false, statsOpen = false;
+
+const $ = sel => document.querySelector(sel);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const clamp = (v,min,max) => Math.min(max, Math.max(min, v));
+const rand  = arr => arr[Math.floor(Math.random()*arr.length)];
+const hexA  = (hex,a) => { const n=parseInt(hex.slice(1),16);
+  return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; };
+
+function joinRu(items){
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return items.join(" и ");
+  return items.slice(0,-1).join(", ") + " и " + items[items.length-1];
+}
+
+function showToast(html, icon, type){
+  const toast = document.createElement("div");
+  toast.className = `toast ${type || "info"}`;
+  toast.innerHTML =
+    `<svg class="icon toast-ico"><use href="#${icon}"/></svg>
+     <button aria-label="Закрыть"><svg class="icon"><use href="#i-close"/></svg></button>
+     ${html}`;
+  toast.querySelector("button").onclick = ()=> toast.remove();
+  document.body.appendChild(toast);
+  setTimeout(()=>{
+    if (!toast.isConnected) return;
+    toast.classList.add("hide");
+    toast.addEventListener("transitionend", ()=> toast.remove(), { once:true });
+    setTimeout(()=> toast.remove(), 600);
+  }, 5000);
+}
+
+function toggleAction(act){
+  if (state.locked || modalOpen || statsOpen) return;
+  if (act === "skip"){
+    selection.clear();
+    selection.add("skip");
+  } else {
+    selection.delete("skip");
+    if (selection.has(act)) selection.delete(act);
+    else selection.add(act);
+  }
+  renderSelection();
+}
+
+function renderSelection(){
+  document.querySelectorAll(".action-btn").forEach(b=>{
+    const on = selection.has(b.dataset.act);
+    b.classList.toggle("selected", on);
+    b.setAttribute("aria-pressed", on);
+  });
+  const btn = $("#confirmBtn"), label = $("#confirmLabel");
+  btn.disabled = selection.size === 0;
+  if (!selection.size){ label.textContent = "Выбери действия"; return; }
+  const mult = SPEED_STEPS[state.speedIdx];
+  const total = Math.round([...selection].reduce((s,a)=> s + ACTIONS[a].delta, 0) * mult);
+  label.textContent = `Подтвердить: ${total>0?"+":""}${total} к весу`;
+}
+
+function confirmAction(){
+  if (!selection.size || state.locked || modalOpen || statsOpen) return;
+  const acts = ACTION_ORDER.filter(a => selection.has(a));
+  selection.clear();
+  renderSelection();
+  actCombo(acts);
+}
+
+function sampleLaneTags(n){
+  const pool = TAG_NAMES.slice(), picked = [];
+  while (picked.length < n){
+    const total = pool.reduce((s,t)=> s + state.weights[t], 0);
+    if (total <= 0) break;
+    let r = Math.random() * total;
+    for (let i=0; i<pool.length; i++){
+      r -= state.weights[pool[i]];
+      if (r <= 0){ picked.push(pool.splice(i,1)[0]); break; }
+    }
+  }
+  const rest = pool.sort((a,b)=> state.weights[a]-state.weights[b]);
+  while (picked.length < n && rest.length) picked.push(rest.shift());
+  return picked;
+}
+
+function pickVideoFromTag(tag){
+  let pool = VIDEOS.filter(v => v.tag===tag && v.id!==state.current.id);
+  if (!pool.length) pool = VIDEOS.filter(v => v.tag===tag);
+  const min = Math.min(...pool.map(v => state.shown[v.id]||0));
+  return rand(pool.filter(v => (state.shown[v.id]||0)===min));
+}
+
+function laneProbs(){
+  if (!state.lane.length) return [];
+  const sum = state.lane.reduce((s,c)=> s + state.weights[c.tag], 0);
+  return state.lane.map(c => sum>0 ? state.weights[c.tag]/sum : 1/state.lane.length);
+}
+
+function buildLane(){
+  state.lane = sampleLaneTags(4).map(tag => ({ tag, video:pickVideoFromTag(tag) }));
+  renderLane();
+}
+
+function renderLane(){
+  const box = $("#laneCands");
+  box.innerHTML = "";
+  state.laneEls = [];
+  const probs = laneProbs();
+
+  state.lane.forEach((c,i)=>{
+    const el = document.createElement("div");
+    el.className = "cand" + (state.weights[c.tag]<=0 ? " zero" : "");
+    el.style.setProperty("--i", i);
+    el.innerHTML =
+      `<span class="cand-ico" style="color:${TAGS[c.tag].color}"><svg class="icon"><use href="#${c.video.icon}"/></svg></span>
+       <span class="cand-txt"><b>${c.video.title}</b><i>${c.tag} · вес ${state.weights[c.tag]}</i></span>
+       <b class="cand-prob">${Math.round(probs[i]*100)}%</b>`;
+    el.style.borderLeftColor = TAGS[c.tag].color;
+    box.appendChild(el);
+    state.laneEls.push(el);
+  });
+
+  requestAnimationFrame(drawWires);
+}
+
+function updateLaneProbs(){
+  const probs = laneProbs();
+  state.lane.forEach((c,i)=>{
+    const el = state.laneEls[i];
+    if (!el) return;
+    const w = state.weights[c.tag];
+    el.querySelector(".cand-prob").textContent = Math.round(probs[i]*100) + "%";
+    el.querySelector(".cand-txt i").textContent = `${c.tag} · вес ${w}`;
+    el.classList.toggle("zero", w<=0);
+
+    const wire = state.wireEls[i];
+    if (wire){
+      if (w<=0){
+        wire.classList.add("zero");
+        wire.setAttribute("stroke","var(--flat)");
+        wire.setAttribute("stroke-width","1.4");
+        wire.style.opacity = ".55";
+      } else {
+        wire.classList.remove("zero");
+        wire.setAttribute("stroke", TAGS[c.tag].color);
+        wire.setAttribute("stroke-width", String(1.6 + probs[i]*11));
+        wire.style.opacity = ".95";
+      }
+    }
+  });
+}
+
+function drawWires(){
+  const svg = $("#laneWires"), board = $("#laneBoard");
+  if (!state.lane.length || !state.laneEls.length) return;
+  const w = board.offsetWidth, h = board.offsetHeight;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = "";
+
+  const br = board.getBoundingClientRect();
+  const rr = $("#rootChip").getBoundingClientRect();
+  const probs = laneProbs();
+
+  const GX = 24;
+  const y0 = rr.bottom - br.top + 2;
+  const centers = state.laneEls.map(el=>{
+    const cr = el.getBoundingClientRect();
+    return { x: cr.left - br.left, y: cr.top - br.top + cr.height/2 };
+  });
+  const lastY = centers[centers.length-1].y;
+
+  const trunk = document.createElementNS(SVG_NS,"path");
+  trunk.setAttribute("d", `M ${GX} ${y0} L ${GX} ${lastY}`);
+  trunk.classList.add("trunk");
+  svg.appendChild(trunk);
+
+  const dot = document.createElementNS(SVG_NS,"circle");
+  dot.setAttribute("cx",GX); dot.setAttribute("cy",y0); dot.setAttribute("r","3.5");
+  dot.classList.add("trunk-dot");
+  svg.appendChild(dot);
+
+  state.wireEls = [];
+  centers.forEach((c,i)=>{
+    const tag = state.lane[i].tag;
+    const wgt = state.weights[tag];
+    const x1 = c.x - 10, y1 = c.y;
+    const r  = Math.min(10, Math.max(3, y1 - y0));
+    const d  = `M ${GX} ${y1-r} Q ${GX} ${y1} ${GX+r} ${y1} L ${x1} ${y1}`;
+    const p = document.createElementNS(SVG_NS,"path");
+    p.setAttribute("d", d);
+    p.classList.add("wire");
+    p.style.animationDelay = (i*80)+"ms";
+    if (wgt<=0){
+      p.classList.add("zero");
+      p.setAttribute("stroke","var(--flat)");
+      p.setAttribute("stroke-width","1.4");
+      p.style.opacity = ".55";
+    } else {
+      p.setAttribute("stroke", TAGS[tag].color);
+      p.setAttribute("stroke-width", String(1.6 + probs[i]*11));
+      p.style.opacity = ".95";
+    }
+    svg.appendChild(p);
+    state.wireEls.push(p);
+  });
+}
+
+function selectLane(i){
+  state.laneEls.forEach((el,j)=>{
+    el.classList.toggle("winner", j===i);
+    el.classList.toggle("dim", j!==i);
+    if (j===i) el.style.setProperty("--wc", TAGS[state.lane[j].tag].color);
+  });
+  state.wireEls.forEach((p,j)=>{
+    p.classList.toggle("flow", j===i);
+    p.classList.toggle("dim",  j!==i);
+  });
+}
+
+function renderTrail(){
+  const box = $("#trailChips");
+  box.innerHTML = "";
+  state.trail.forEach(v=>{
+    const c = document.createElement("span");
+    c.className = "trail-chip";
+    c.style.color = TAGS[v.tag].color;
+    c.title = v.title;
+    c.innerHTML = `<svg class="icon"><use href="#${v.icon}"/></svg>`;
+    box.appendChild(c);
+    const a = document.createElement("span");
+    a.className = "trail-arrow";
+    a.textContent = "›";
+    box.appendChild(a);
+  });
+}
+
+function renderVideo(v){
+  const card = $("#videoCard");
+  card.classList.remove("watched");
+  $("#vIconUse").setAttribute("href", "#" + v.icon);
+  $("#vTagDot").style.background = TAGS[v.tag].color;
+  $("#vTagText").textContent = v.tag;
+  $("#vTitle").textContent = v.title;
+  $("#vDur").textContent = v.dur;
+  $("#vViews").textContent = v.views + " просмотров";
+  $("#scoreText").textContent = `#${v.tag}: ${state.weights[v.tag]}/10`;
+
+  const root = $("#rootChip");
+  $("#rootIconUse").setAttribute("href", "#" + v.icon);
+  $("#rootTitle").textContent = v.title;
+  $("#rootMeta").textContent = `${v.tag} · вес ${state.weights[v.tag]}`;
+  root.querySelector(".root-ico").style.color = TAGS[v.tag].color;
+  root.style.borderLeftColor = TAGS[v.tag].color;
+}
+
+const dockRefs = {};
+function buildDock(){
+  const rows = $("#dockRows");
+  TAG_NAMES.forEach(tag=>{
+    const m = document.createElement("div");
+    m.className = "mrow";
+    m.innerHTML =
+      `<span class="m-ico"><svg class="icon"><use href="#${TAGS[tag].icon}"/></svg></span>
+       <div class="m-name"><b>${tag}</b><i class="lead-pill">лидер</i></div>
+       <div class="m-track"><i class="m-fill"></i></div>
+       <div class="m-num"><b>3</b><span>/10</span></div>
+       <span class="m-delta">—</span>`;
+    rows.appendChild(m);
+    const ico = m.querySelector(".m-ico");
+    ico.style.color = TAGS[tag].color;
+    ico.style.background = hexA(TAGS[tag].color, .12);
+    const pill = m.querySelector(".lead-pill");
+    pill.style.background = hexA(TAGS[tag].color, .15);
+    pill.style.color = TAGS[tag].color;
+    dockRefs[tag] = {
+      m, num:m.querySelector(".m-num b"), fill:m.querySelector(".m-fill"),
+      delta:m.querySelector(".m-delta"),
+    };
+  });
+}
+
+function renderDockRows(changedTag, delta){
+  const maxW = Math.max(...TAG_NAMES.map(t=>state.weights[t]));
+  TAG_NAMES.forEach(tag=>{
+    const r = dockRefs[tag], w = state.weights[tag];
+    r.num.textContent = w;
+    r.fill.style.width = (w*10) + "%";
+    r.fill.style.background = TAGS[tag].color;
+    const leader = (w===maxW && maxW>=5);
+    r.m.classList.toggle("leader", leader);
+    r.m.style.setProperty("--lc", hexA(TAGS[tag].color, .5));
+  });
+  if (changedTag && delta){
+    const d = dockRefs[changedTag].delta;
+    d.textContent = (delta>0?"+":"") + delta;
+    d.className = "m-delta " + (delta>0 ? "up" : "down");
+    void d.offsetWidth;
+    d.classList.add("pop");
+  }
+}
+
+const chartRefs = {};
+const CH = { W:220, H:92, padL:24, padR:8, padT:8, padB:16 };
+const chartY = v => CH.padT + (1 - v/10) * (CH.H - CH.padT - CH.padB);
+
+function buildCharts(){
+  const wrap = $("#dockCharts");
+  TAG_NAMES.forEach(tag=>{
+    const card = document.createElement("div");
+    card.className = "chart-card";
+    card.innerHTML =
+      `<div class="chart-head">
+         <span class="chart-ico"><svg class="icon"><use href="#${TAGS[tag].icon}"/></svg></span>
+         <b>${tag}</b>
+         <span class="chart-now">3</span>
+       </div>
+       <svg class="chart-svg" viewBox="0 0 ${CH.W} ${CH.H}"></svg>`;
+    wrap.appendChild(card);
+
+    const ico = card.querySelector(".chart-ico");
+    ico.style.color = TAGS[tag].color;
+    ico.style.background = hexA(TAGS[tag].color, .12);
+
+    const svg = card.querySelector(".chart-svg");
+    [0,5,10].forEach(v=>{
+      const y = chartY(v);
+      const l = document.createElementNS(SVG_NS,"line");
+      l.setAttribute("x1",CH.padL); l.setAttribute("x2",CH.W-CH.padR);
+      l.setAttribute("y1",y); l.setAttribute("y2",y);
+      l.setAttribute("class","ch-grid");
+      svg.appendChild(l);
+      const t = document.createElementNS(SVG_NS,"text");
+      t.setAttribute("x",CH.padL-6); t.setAttribute("y",y+3);
+      t.setAttribute("class","ch-label");
+      t.textContent = v;
+      svg.appendChild(t);
+    });
+
+    const area = document.createElementNS(SVG_NS,"path");
+    area.setAttribute("class","ch-area");
+    area.setAttribute("fill", hexA(TAGS[tag].color, .14));
+    const line = document.createElementNS(SVG_NS,"polyline");
+    line.setAttribute("class","ch-line");
+    line.setAttribute("stroke", TAGS[tag].color);
+    const dots = document.createElementNS(SVG_NS,"g");
+    dots.setAttribute("fill", TAGS[tag].color);
+    svg.append(area, line, dots);
+
+    chartRefs[tag] = { card, now:card.querySelector(".chart-now"), area, line, dots };
+  });
+}
+
+function drawChart(tag){
+  const vals = state.spark[tag];
+  const r = chartRefs[tag];
+  r.now.textContent = state.weights[tag];
+
+  const plotW = CH.W - CH.padL - CH.padR;
+  const n = vals.length;
+  const pts = n === 1
+    ? [{x:CH.padL, y:chartY(vals[0])}, {x:CH.padL+plotW, y:chartY(vals[0])}]
+    : vals.map((v,i)=>({ x:CH.padL + i*(plotW/(n-1)), y:chartY(v) }));
+  const base = chartY(0);
+
+  const ptsStr = pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  r.line.setAttribute("points", ptsStr);
+  r.area.setAttribute("d",
+    `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} ` +
+    pts.slice(1).map(p=>`L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ") +
+    ` L ${pts[pts.length-1].x.toFixed(1)} ${base.toFixed(1)} L ${pts[0].x.toFixed(1)} ${base.toFixed(1)} Z`);
+
+  r.dots.innerHTML = "";
+  pts.forEach((p,i)=>{
+    const c = document.createElementNS(SVG_NS,"circle");
+    c.setAttribute("cx",p.x.toFixed(1)); c.setAttribute("cy",p.y.toFixed(1));
+    c.setAttribute("r", i === pts.length-1 ? 3.2 : 1.8);
+    if (i < pts.length-1) c.setAttribute("opacity",".75");
+    r.dots.appendChild(c);
+  });
+}
+
+function renderCharts(){ TAG_NAMES.forEach(drawChart); }
+
+function showChartHint(tag, html){
+  const card = chartRefs[tag].card;
+  card.querySelectorAll(".chart-hint").forEach(h => h.remove());
+  const hint = document.createElement("div");
+  hint.className = "chart-hint";
+  hint.innerHTML = html;
+  card.appendChild(hint);
+  const remove = ()=>{
+    if (!hint.isConnected) return;
+    hint.classList.add("hide");
+    setTimeout(()=> hint.remove(), 320);
+  };
+  hint.addEventListener("click", remove);
+  setTimeout(remove, 4200);
+}
+
+function maybeShowWeightHint(tag, oldW, newW){
+  if (newW === 0 && oldW !== 0 && !state.firstZero.has(tag)){
+    state.firstZero.add(tag);
+    showChartHint(tag,
+      `<svg class="icon h-ico"><use href="#i-ban"/></svg>
+       <b>${tag}</b> исключены из ленты.<br>
+       Лайкни видео этой темы, чтобы алгоритм снова начал её предлагать.`);
+    showToast(`<b>${tag}</b> исключены из ленты.<br>Вес упал до нуля — тема почти не будет показываться.`, "i-ban", "info");
+  }
+  if (newW === 10 && oldW !== 10 && !state.firstMax.has(tag)){
+    state.firstMax.add(tag);
+    showChartHint(tag,
+      `<svg class="icon h-ico"><use href="#i-spark"/></svg>
+       <b>${tag}</b> — абсолютный фаворит.<br>
+       Алгоритм будет предлагать почти только эту тему.`);
+    showToast(`<b>${tag}</b> — абсолютный фаворит алгоритма.<br>Лента заполнена этой темой.`, "i-spark", "warn");
+  }
+}
+
+function showExplain(acts, video, oldW, newW, next, prob, isMax, appliedDelta){
+  const phrase = joinRu(acts.map(a => ACTIONS[a].verb));
+  const breakdown = acts.map(a => `${ACTIONS[a].delta>0?"+":""}${ACTIONS[a].delta} ${ACTIONS[a].short}`).join(", ");
+  const verdict = isMax
+    ? `Его ветка была самой толстой — ${Math.round(prob*100)}%.`
+    : `Шанс этой ветки — ${Math.round(prob*100)}%: при взвешенном выборе может выпасть и не лидер.`;
+  const speedTag = state.speedIdx !== 1
+    ? ` Скорость обучения <b>×${SPEED_STEPS[state.speedIdx]}</b>, итоговый эффект: <span class="wt">${appliedDelta>0?"+":""}${appliedDelta}</span>.`
+    : "";
+  const box = $("#explain");
+  box.className = "explain " + (newW>oldW ? "up" : newW<oldW ? "down" : "");
+  box.innerHTML =
+    `Ты <b>${phrase}</b> видео «<b>${video.title}</b>» с тегом <b>${video.tag}</b>.<br>
+     Вес тега <b>${video.tag}</b> изменился:
+     <span class="wt">${oldW}</span><span class="arrow">→</span><span class="wt">${newW}</span>
+     <span class="wt">(${breakdown})</span>.${speedTag} Ветки перестроились.<br>
+     Алгоритм выбрал «<b>${next.title}</b>». ${verdict}`;
+  void box.offsetWidth;
+  box.classList.add("in");
+}
+
+function checkBubble(){
+  if (state.actions < 10) return;
+  const dom = TAG_NAMES.find(t => state.weights[t] >= 8);
+  if (dom && state.bubbleTag !== dom){
+    state.bubbleTag = dom;
+    if (!state.bubbleAt) state.bubbleAt = state.actions;
+    showToast(
+      `<b>Фильтрующий пузырь сформирован!</b><br>
+       Твоя лента сузилась до одной темы: <b>${dom}</b>
+       (вес ${state.weights[dom]}/10). Разбавь её другими действиями.`,
+      "i-alert", "warn");
+  }
+  if (!dom) state.bubbleTag = null;
+}
+
+function actCombo(acts){
+  if (state.locked || modalOpen || statsOpen) return;
+  state.locked = true;
+  document.querySelectorAll(".action-btn").forEach(b => b.disabled = true);
+
+  const video = state.current;
+  const oldW  = state.weights[video.tag];
+  const mult  = SPEED_STEPS[state.speedIdx];
+  const raw   = acts.reduce((s,a)=> s + ACTIONS[a].delta, 0);
+  const appliedDelta = Math.round(raw * mult);
+
+  state.prevWeights = { ...state.weights };
+  const newW = clamp(oldW + appliedDelta, 0, 10);
+  state.weights[video.tag] = newW;
+  state.spark[video.tag].push(newW);
+  if (state.spark[video.tag].length > 16) state.spark[video.tag].shift();
+  if (acts.includes("watch")) $("#videoCard").classList.add("watched");
+
+  state.log.push({ n: state.actions + 1, tag: video.tag, acts: acts.slice(), delta: appliedDelta });
+  if (state.log.length > 200) state.log.shift();
+
+  maybeShowWeightHint(video.tag, oldW, newW);
+
+  renderDockRows(video.tag, newW-oldW);
+  drawChart(video.tag);
+  state.actions++;
+  $("#actCount").textContent = state.actions;
+  const chip = $("#counterChip");
+  chip.classList.remove("pop"); void chip.offsetWidth; chip.classList.add("pop");
+
+  updateLaneProbs();
+  $("#rootMeta").textContent = `${video.tag} · вес ${newW}`;
+  $("#scoreText").textContent = `#${video.tag}: ${newW}/10`;
+
+  setTimeout(()=>{
+    const probs = laneProbs();
+    let r = Math.random(), wi = probs.length-1;
+    for (let i=0; i<probs.length; i++){ r -= probs[i]; if (r<=0){ wi=i; break; } }
+    const winner = state.lane[wi], prob = probs[wi];
+    const isMax = prob === Math.max(...probs);
+    selectLane(wi);
+
+    setTimeout(()=>{
+      state.trail.push(video);
+      if (state.trail.length > 6) state.trail.shift();
+      state.current = winner.video;
+      state.shown[winner.video.id] = (state.shown[winner.video.id]||0) + 1;
+
+      const card = $("#videoCard");
+      card.classList.add("out");
+      setTimeout(()=>{
+        renderVideo(winner.video);
+        renderTrail();
+        card.classList.remove("out");
+        card.classList.add("glitch-in");
+        setTimeout(() => card.classList.remove("glitch-in"), 500);
+      }, 310);
+
+      buildLane();
+      showExplain(acts, video, oldW, newW, winner.video, prob, isMax, appliedDelta);
+      checkBubble();
+
+      state.locked = false;
+      document.querySelectorAll(".action-btn").forEach(b => b.disabled = false);
+      renderSelection();
+    }, 750);
+  }, 650);
+}
+
+const backdrop = $("#modalBackdrop");
+function openGuide(){ backdrop.classList.add("open"); modalOpen = true; document.body.style.overflow = "hidden"; }
+function closeGuide(){ backdrop.classList.remove("open"); modalOpen = false; document.body.style.overflow = ""; }
+$("#helpBtn").addEventListener("click", openGuide);
+$("#modalClose").addEventListener("click", closeGuide);
+$("#modalGo").addEventListener("click", closeGuide);
+backdrop.addEventListener("click", e=>{ if (e.target === backdrop) closeGuide(); });
+
+const statsBackdrop = $("#statsBackdrop");
+function openStats(){
+  renderStats();
+  statsBackdrop.classList.add("open");
+  statsOpen = true;
+  document.body.style.overflow = "hidden";
+}
+function closeStats(){
+  statsBackdrop.classList.remove("open");
+  statsOpen = false;
+  document.body.style.overflow = "";
+}
+$("#statsBtn").addEventListener("click", openStats);
+$("#statsClose").addEventListener("click", closeStats);
+$("#statsGo").addEventListener("click", closeStats);
+statsBackdrop.addEventListener("click", e=>{ if (e.target === statsBackdrop) closeStats(); });
+
+function renderStats(){
+  const body = $("#statsBody");
+
+  if (state.actions === 0){
+    body.innerHTML = `<div class="stat-empty">Пока нет данных — сделай хотя бы одно действие, и здесь появится полная статистика сессии.</div>`;
+    return;
+  }
+
+  const total = state.actions;
+  const avgWeight = (TAG_NAMES.reduce((s,t)=> s + state.weights[t], 0) / TAG_NAMES.length).toFixed(1);
+  const tagCounts = Object.fromEntries(TAG_NAMES.map(t=>[t,0]));
+  state.log.forEach(l => { tagCounts[l.tag]++; });
+  const topTagByCount = TAG_NAMES.slice().sort((a,b)=> tagCounts[b] - tagCounts[a])[0];
+  const topCount = tagCounts[topTagByCount];
+  const topPct = Math.round(topCount/total*100);
+  const bubbleText = state.bubbleAt ? `на действии №${state.bubbleAt}` : "не сформирован";
+  const actCounts = { like:0, repost:0, watch:0, skip:0 };
+  state.log.forEach(l => l.acts.forEach(a => actCounts[a]++));
+  const totalActClicks = Object.values(actCounts).reduce((s,v)=>s+v, 0);
+  const avgDelta = (state.log.reduce((s,l)=> s + l.delta, 0) / total).toFixed(2);
+
+  const insights = [];
+  if (topPct >= 50) insights.push(`Ты взаимодействуешь с темой <b>${topTagByCount}</b> в ${topPct}% случаев — алгоритм уже сильно смещён в её сторону.`);
+  if (state.bubbleAt) insights.push(`Фильтрующий пузырь сформировался на действии <b>№${state.bubbleAt}</b>. После этого разнообразие ленты упало.`);
+  else if (total >= 15) insights.push(`Несмотря на ${total} действий, пузырь не сформирован — ты держишь ленту разнообразной.`);
+  if (actCounts.skip > total * 0.3) insights.push(`Ты пропускаешь больше трети видео (${actCounts.skip} раз). Алгоритм быстро сужает круг тем.`);
+  if (actCounts.watch >= total * 0.5) insights.push(`Досматривание — твой главный сигнал: ${actCounts.watch} из ${total} действий.`);
+  const currentMax = Math.max(...TAG_NAMES.map(t=> state.weights[t]));
+  const currentMin = Math.min(...TAG_NAMES.map(t=> state.weights[t]));
+  if (currentMax - currentMin >= 7) insights.push(`Разброс весов сейчас ${currentMax - currentMin}: лента сильно поляризована.`);
+  if (!insights.length) insights.push(`Сессия слишком короткая для инсайтов — продолжай экспериментировать!`);
+
+  const maxCount = Math.max(1, ...Object.values(tagCounts));
+  const maxActCount = Math.max(1, ...Object.values(actCounts));
+
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-kpi accent">
+        <div class="k-lbl">Действий</div>
+        <div class="k-val">${total}</div>
+      </div>
+      <div class="stat-kpi">
+        <div class="k-lbl">Топ-тема</div>
+        <div class="k-val">${topPct}<small>% ${topTagByCount}</small></div>
+      </div>
+      <div class="stat-kpi">
+        <div class="k-lbl">Средний вес</div>
+        <div class="k-val">${avgWeight}<small>/10</small></div>
+      </div>
+      <div class="stat-kpi">
+        <div class="k-lbl">Средний эффект</div>
+        <div class="k-val">${avgDelta>0?"+":""}${avgDelta}</div>
+      </div>
+      <div class="stat-kpi">
+        <div class="k-lbl">Пузырь</div>
+        <div class="k-val" style="font-size:15px; line-height:1.3;">${bubbleText}</div>
+      </div>
+    </div>
+
+    <div class="stat-sec">
+      <h4>Действия по темам</h4>
+      <div class="stat-bars">
+        ${TAG_NAMES.map(tag=>{
+          const c = tagCounts[tag];
+          const pct = total ? Math.round(c/total*100) : 0;
+          const w = (c/maxCount*100).toFixed(1);
+          return `
+            <div class="stat-bar-row">
+              <span class="nm"><svg class="icon" style="color:${TAGS[tag].color}"><use href="#${TAGS[tag].icon}"/></svg>${tag}</span>
+              <div class="stat-bar-track">
+                <i class="stat-bar-fill" style="width:${w}%; background:${TAGS[tag].color}"></i>
+              </div>
+              <b>${c} · ${pct}%</b>
+            </div>`;
+        }).join("")}
+      </div>
+    </div>
+
+    <div class="stat-sec">
+      <h4>Какие действия ты используешь</h4>
+      <div class="stat-bars">
+        ${ACTION_ORDER.map(a=>{
+          const c = actCounts[a];
+          const pct = totalActClicks ? Math.round(c/totalActClicks*100) : 0;
+          const w = totalActClicks ? (c/maxActCount*100).toFixed(1) : 0;
+          const color = a==="skip" ? "var(--down)" : "var(--up)";
+          return `
+            <div class="stat-bar-row">
+              <span class="nm">${ACTIONS[a].short}</span>
+              <div class="stat-bar-track">
+                <i class="stat-bar-fill" style="width:${w}%; background:${color}"></i>
+              </div>
+              <b>${c} · ${pct}%</b>
+            </div>`;
+        }).join("")}
+      </div>
+    </div>
+
+    <div class="stat-sec">
+      <h4>Инсайты</h4>
+      <div class="insight-box">
+        <ul>${insights.map(i => `<li>${i}</li>`).join("")}</ul>
+      </div>
+    </div>
+  `;
+}
+
+const SPEED_LABELS = ["×0.5","×1","×2","×3"];
+const savedSpeed = parseInt(localStorage.getItem("recsim-speed") || "1", 10);
+state.speedIdx = Math.max(0, Math.min(SPEED_STEPS.length-1, savedSpeed));
+$("#speedRange").value = state.speedIdx;
+$("#speedLabel").textContent = SPEED_LABELS[state.speedIdx];
+
+$("#speedRange").addEventListener("input", e=>{
+  state.speedIdx = parseInt(e.target.value, 10);
+  localStorage.setItem("recsim-speed", String(state.speedIdx));
+  $("#speedLabel").textContent = SPEED_LABELS[state.speedIdx];
+  renderSelection();
+});
+
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem("recsim-theme", t);
+  $("#themeIcon").setAttribute("href", t==="dark" ? "#i-sun" : "#i-moon");
+}
+$("#themeBtn").addEventListener("click", ()=>{
+  applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+});
+applyTheme(document.documentElement.dataset.theme || "dark");
+
+function reset(){
+  document.querySelectorAll(".toast").forEach(t => t.remove());
+  document.querySelectorAll(".chart-hint").forEach(h => h.remove());
+  state.weights     = Object.fromEntries(TAG_NAMES.map(t=>[t,3]));
+  state.prevWeights = { ...state.weights };
+  state.spark       = Object.fromEntries(TAG_NAMES.map(t=>[t,[3]]));
+  state.actions     = 0;
+  state.shown       = {};
+  state.trail       = [];
+  state.bubbleTag   = null;
+  state.bubbleAt    = null;
+  state.locked      = false;
+  state.log         = [];
+  state.firstZero   = new Set();
+  state.firstMax    = new Set();
+  selection.clear();
+  renderSelection();
+
+  $("#actCount").textContent = "0";
+  state.current = rand(VIDEOS);
+  state.shown[state.current.id] = 1;
+
+  renderVideo(state.current);
+  renderTrail();
+  buildLane();
+  renderDockRows();
+  renderCharts();
+
+  TAG_NAMES.forEach(tag=>{
+    const d = dockRefs[tag].delta;
+    d.textContent = "—";
+    d.className = "m-delta";
+  });
+
+  const box = $("#explain");
+  box.className = "explain";
+  box.textContent = "Веса сброшены: у каждой темы по 3 из 10. Собери комбинацию действий и нажми «Подтвердить»!";
+  void box.offsetWidth; box.classList.add("in");
+
+  document.querySelectorAll(".action-btn").forEach(b => b.disabled = false);
+}
+
+buildDock();
+buildCharts();
+reset();
+
+document.querySelectorAll(".action-btn").forEach(btn=>{
+  btn.addEventListener("click", e=>{
+    const rect = btn.getBoundingClientRect();
+    const rip  = document.createElement("span");
+    const size = Math.max(rect.width, rect.height);
+    rip.className = "ripple";
+    rip.style.width = rip.style.height = size + "px";
+    rip.style.left  = (e.clientX - rect.left - size/2) + "px";
+    rip.style.top   = (e.clientY - rect.top  - size/2) + "px";
+    btn.appendChild(rip);
+    rip.addEventListener("animationend", ()=> rip.remove());
+    toggleAction(btn.dataset.act);
+  });
+});
+
+$("#confirmBtn").addEventListener("click", confirmAction);
+
+document.addEventListener("keydown", e=>{
+  if (e.key === "Escape"){
+    if (modalOpen) closeGuide();
+    else if (statsOpen) closeStats();
+    return;
+  }
+  if (modalOpen || statsOpen || e.repeat) return;
+  const map = { "1":"like", "2":"repost", "3":"watch", "4":"skip" };
+  if (map[e.key]){ toggleAction(map[e.key]); return; }
+  if (e.key === " "){ e.preventDefault(); confirmAction(); return; }
+  if (e.key === "r" || e.key === "R" || e.key === "к" || e.key === "К") reset();
+});
+
+$("#resetBtn").addEventListener("click", reset);
+
+let rTimer;
+window.addEventListener("resize", ()=>{
+  clearTimeout(rTimer);
+  rTimer = setTimeout(drawWires, 120);
+});
+</script>
+</body>
+</html>
