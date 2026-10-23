@@ -19,17 +19,12 @@ document.documentElement.dataset.theme = localStorage.getItem("recsim-theme") ||
   --vcard-spot:rgba(255,255,255,.05);
   --title-shadow:0 2px 12px rgba(0,0,0,.6);
   --chip-bg:rgba(22,22,22,.9); --chip-line:#363636; --chip-fg:#a8a8a8;
-  /* АДАПТИВНАЯ плашка объяснения — тёмная тема */
-  --explain-bg:#161616;
-  --explain-fg:#f5f5f5;
-  --explain-line:#2a2a2a;
-  --explain-accent:#4a4a4a;
+  --explain-bg:#161616; --explain-fg:#f5f5f5; --explain-line:#2a2a2a; --explain-accent:#4a4a4a;
   --ripple:rgba(255,255,255,.18);
   --panel-shadow:none;
   --font-body:"Trebuchet MS", "Segoe UI", Tahoma, Verdana, sans-serif;
   --font-display:Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
   --font-mono:"Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* Интерактивный фон — цвет линий в тёмной теме */
   --path-line: rgba(255, 255, 255, 0.35);
   --path-fade: rgba(0, 0, 0, 0.85);
 }
@@ -43,44 +38,30 @@ document.documentElement.dataset.theme = localStorage.getItem("recsim-theme") ||
   --vcard-spot:rgba(0,0,0,.035);
   --title-shadow:none;
   --chip-bg:rgba(255,255,255,.85); --chip-line:#dcdcdc; --chip-fg:#737373;
-  /* АДАПТИВНАЯ плашка объяснения — светлая тема */
-  --explain-bg:#f7f9fc;
-  --explain-fg:#1f2430;
-  --explain-line:#e3e8f0;
-  --explain-accent:#d5dce8;
+  --explain-bg:#f7f9fc; --explain-fg:#1f2430; --explain-line:#e3e8f0; --explain-accent:#d5dce8;
   --ripple:rgba(0,0,0,.08);
   --panel-shadow:0 2px 12px rgba(0,0,0,.05);
-  /* Интерактивный фон — цвет линий в светлой теме */
   --path-line: rgba(0, 0, 0, 0.25);
   --path-fade: rgba(250, 250, 250, 0.85);
 }
 *{ margin:0; padding:0; box-sizing:border-box; }
 html{ scroll-behavior:smooth; }
 
-/* Интерактивный canvas-фон: плавающие линии */
 #bgPaths{
-  position: fixed; inset: 0;
-  width: 100%; height: 100%;
-  z-index: -2;
-  pointer-events: none;
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: -2; pointer-events: none;
   color: var(--path-line);
-  opacity: 0;
-  transition: opacity .6s ease-out;
+  opacity: 0; transition: opacity .6s ease-out;
 }
-/* Виньетка поверх линий, чтобы контент читался */
 .bg-mask{
-  position: fixed; inset: 0;
-  z-index: -1;
-  pointer-events: none;
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
     radial-gradient(ellipse 80% 60% at 50% 50%, transparent 0%, var(--path-fade) 95%),
     linear-gradient(to bottom, var(--path-fade) 0%, transparent 12%, transparent 88%, var(--path-fade) 100%);
 }
 
 body{
-  font-family:var(--font-body);
-  color:var(--text);
-  background: var(--bg);
+  font-family:var(--font-body); color:var(--text); background: var(--bg);
   min-height:100vh; overflow-x:hidden;
   transition: color .35s ease, background-color .35s ease;
 }
@@ -366,13 +347,10 @@ h1 em{ font-style:italic; color:var(--blue); }
 .wire.flow{ stroke-dasharray:6 10; animation:flow .6s linear infinite; }
 @keyframes flow{ to{ stroke-dashoffset:-64; } }
 
-/* Плашка объяснения — теперь адаптивна к теме */
 .explain{
   margin-top:16px;
-  background: var(--explain-bg);
-  color: var(--explain-fg);
-  border:1px solid var(--explain-line);
-  border-left:5px solid var(--explain-accent);
+  background: var(--explain-bg); color: var(--explain-fg);
+  border:1px solid var(--explain-line); border-left:5px solid var(--explain-accent);
   border-radius:12px; padding:15px 17px; font-size:14.5px; line-height:1.6;
   box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
@@ -619,7 +597,6 @@ h1 em{ font-style:italic; color:var(--blue); }
 </head>
 <body>
 
-<!-- Интерактивный фон: плавающие линии -->
 <canvas id="bgPaths" aria-hidden="true"></canvas>
 <div class="bg-mask" aria-hidden="true"></div>
 
@@ -908,11 +885,12 @@ h1 em{ font-style:italic; color:var(--blue); }
       <div class="guide-sec">
         <h3>Как читать «Путь рекомендации»</h3>
         <ul>
-          <li>Верхняя карточка — <b>текущее видео</b>. Из неё вниз идёт ствол, от которого расходятся ветки к четырём кандидатам.</li>
-          <li><b>Толщина ветки = вероятность</b>. Она пропорциональна весу тега кандидата.</li>
+          <li>Верхняя карточка — <b>текущее видео</b>. Из неё вниз идёт ствол, от которого расходятся ветки к пяти кандидатам — по одному на каждую тему.</li>
+          <li><b>Толщина ветки = вероятность</b>. Она равна весу тега, делённому на сумму всех весов, поэтому всегда видна реакция на любое действие.</li>
           <li>После твоего действия ветки мгновенно меняют толщину и проценты.</li>
           <li>Выбранная ветка подсвечивается бегущим потоком, видео слева сменяется, дерево строится заново.</li>
           <li>Пунктирная ветка с 0% — тема с нулевым весом: она почти не показывается.</li>
+          <li>Алгоритм не всегда выбирает максимум: он бросает «взвешенный кубик», где у популярных тем больше граней. Иногда выпадает и редкая тема — это защищает от мгновенного пузыря.</li>
         </ul>
       </div>
 
@@ -963,8 +941,9 @@ h1 em{ font-style:italic; color:var(--blue); }
 
 <script>
 "use strict";
+
 /* ============================================================
-   ФОН: «Потоки» — интерактивные линии (портировано с kokonutui)
+   ФОН: интерактивные «потоки» (портировано с kokonutui)
    ============================================================ */
 (function initBackgroundPaths(){
   const canvas = document.getElementById("bgPaths");
@@ -980,7 +959,7 @@ h1 em{ font-style:italic; color:var(--blue); }
   ];
   const COUNT = 36;
   const SPREAD = 1;
-  const ANGLE = -8; // градусы
+  const ANGLE = -8;
   const SPEED = reduceMotion ? 0 : 1;
   const INTERACTIVE = !reduceMotion;
   const SAMPLES = 64;
@@ -996,7 +975,7 @@ h1 em{ font-style:italic; color:var(--blue); }
 
   const frame = {
     width: 0, height: 0,
-    time: reduceMotion ? 40 : 40,
+    time: 40,
     drawn: new Array(total).fill(reduceMotion ? 1 : 0),
     pointer: { x: 0, y: 0, amount: 0, on: false }
   };
@@ -1042,8 +1021,8 @@ h1 em{ font-style:italic; color:var(--blue); }
         const drawn = frame.drawn[layerIndex * perLayer + i] ?? 1;
         if (drawn <= 0) continue;
         const s = perLayer === 1 ? 0 : i / (perLayer - 1) - 0.5;
-        const last = Math.max(1, Math.ceil(SAMPLES * drawn));
-        for (let k = 0; k <= last; k++){
+        const lastK = Math.max(1, Math.ceil(SAMPLES * drawn));
+        for (let k = 0; k <= lastK; k++){
           const u = -OVERSCAN + (k / SAMPLES) * (1 + OVERSCAN * 2);
           const x = u * width;
           const y = lineY(s, u, layer, band);
@@ -1053,12 +1032,12 @@ h1 em{ font-style:italic; color:var(--blue); }
         ctx.globalAlpha = layer.opacity * (0.45 + 0.55 * (1 - Math.abs(s) * 2));
         ctx.beginPath();
         ctx.moveTo(xs[0], ys[0]);
-        for (let k = 1; k < last; k++){
+        for (let k = 1; k < lastK; k++){
           const mx = (xs[k] + xs[k + 1]) / 2;
           const my = (ys[k] + ys[k + 1]) / 2;
           ctx.quadraticCurveTo(xs[k], ys[k], mx, my);
         }
-        ctx.lineTo(xs[last], ys[last]);
+        ctx.lineTo(xs[lastK], ys[lastK]);
         ctx.stroke();
       }
     });
@@ -1130,22 +1109,14 @@ h1 em{ font-style:italic; color:var(--blue); }
   };
   document.addEventListener("visibilitychange", onVisibility);
 
-  // Периодически перечитываем цвет — реагирует на смену темы
   const colorTimer = window.setInterval(() => {
     const next = getComputedStyle(canvas).color;
-    if (next !== color){
-      color = next;
-      paint();
-    }
+    if (next !== color){ color = next; paint(); }
   }, 500);
 
-  // Мгновенная перерисовка при смене темы через data-theme
   const themeObserver = new MutationObserver(() => {
     const next = getComputedStyle(canvas).color;
-    if (next !== color){
-      color = next;
-      paint();
-    }
+    if (next !== color){ color = next; paint(); }
   });
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
@@ -1165,12 +1136,10 @@ h1 em{ font-style:italic; color:var(--blue); }
   window.addEventListener("pointerleave", onLeave);
 
   play();
-
-  // Очистка не требуется — страница долгоживущая
 })();
 
 /* ============================================================
-   ЛОГИКА СИМУЛЯТОРА
+   ДАННЫЕ
    ============================================================ */
 const TAGS = {
   "коты":    { icon:"i-cat",     color:"#d9a441" },
@@ -1234,6 +1203,9 @@ const ACTIONS = {
 const ACTION_ORDER = ["like","repost","watch","skip"];
 const SPEED_STEPS = [0.5, 1, 2, 3];
 
+/* ============================================================
+   СОСТОЯНИЕ
+   ============================================================ */
 const state = {
   weights:{}, prevWeights:{},
   current:null, actions:0,
@@ -1249,6 +1221,9 @@ const state = {
 const selection = new Set();
 let modalOpen = false, statsOpen = false;
 
+/* ============================================================
+   УТИЛИТЫ
+   ============================================================ */
 const $ = sel => document.querySelector(sel);
 const SVG_NS = "http://www.w3.org/2000/svg";
 const clamp = (v,min,max) => Math.min(max, Math.max(min, v));
@@ -1262,6 +1237,9 @@ function joinRu(items){
   return items.slice(0,-1).join(", ") + " и " + items[items.length-1];
 }
 
+/* ============================================================
+   УВЕДОМЛЕНИЯ-ТОСТЫ
+   ============================================================ */
 function showToast(html, icon, type){
   const toast = document.createElement("div");
   toast.className = `toast ${type || "info"}`;
@@ -1279,6 +1257,9 @@ function showToast(html, icon, type){
   }, 5000);
 }
 
+/* ============================================================
+   ВЫБОР ДЕЙСТВИЙ И ПОДТВЕРЖДЕНИЕ
+   ============================================================ */
 function toggleAction(act){
   if (state.locked || modalOpen || statsOpen) return;
   if (act === "skip"){
@@ -1314,38 +1295,32 @@ function confirmAction(){
   actCombo(acts);
 }
 
-function sampleLaneTags(n){
-  const pool = TAG_NAMES.slice(), picked = [];
-  while (picked.length < n){
-    const total = pool.reduce((s,t)=> s + state.weights[t], 0);
-    if (total <= 0) break;
-    let r = Math.random() * total;
-    for (let i=0; i<pool.length; i++){
-      r -= state.weights[pool[i]];
-      if (r <= 0){ picked.push(pool.splice(i,1)[0]); break; }
-    }
-  }
-  const rest = pool.sort((a,b)=> state.weights[a]-state.weights[b]);
-  while (picked.length < n && rest.length) picked.push(rest.shift());
-  return picked;
+/* ============================================================
+   МОДЕЛЬ: 5 веток, честная нормировка по всем темам
+   ============================================================ */
+
+// Ветка всегда содержит ВСЕ 5 тем — по одному кандидату на тему
+function buildLane(){
+  state.lane = TAG_NAMES.map(tag => ({ tag, video: pickVideoFromTag(tag) }));
+  renderLane();
 }
 
+// Вероятность = вес тега / сумма всех весов. Сумма по ветке всегда = 100%.
+function laneProbs(){
+  if (!state.lane.length) return [];
+  const sumAll = TAG_NAMES.reduce((s,t)=> s + state.weights[t], 0);
+  return state.lane.map(c =>
+    sumAll > 0 ? state.weights[c.tag] / sumAll : 1 / state.lane.length
+  );
+}
+
+// Видео из тега, не совпадающее с текущим, предпочитая наименее показанное
 function pickVideoFromTag(tag){
   let pool = VIDEOS.filter(v => v.tag===tag && v.id!==state.current.id);
   if (!pool.length) pool = VIDEOS.filter(v => v.tag===tag);
+  if (!pool.length) return null;
   const min = Math.min(...pool.map(v => state.shown[v.id]||0));
   return rand(pool.filter(v => (state.shown[v.id]||0)===min));
-}
-
-function laneProbs(){
-  if (!state.lane.length) return [];
-  const sum = state.lane.reduce((s,c)=> s + state.weights[c.tag], 0);
-  return state.lane.map(c => sum>0 ? state.weights[c.tag]/sum : 1/state.lane.length);
-}
-
-function buildLane(){
-  state.lane = sampleLaneTags(4).map(tag => ({ tag, video:pickVideoFromTag(tag) }));
-  renderLane();
 }
 
 function renderLane(){
@@ -1358,9 +1333,10 @@ function renderLane(){
     const el = document.createElement("div");
     el.className = "cand" + (state.weights[c.tag]<=0 ? " zero" : "");
     el.style.setProperty("--i", i);
+    const vid = c.video;
     el.innerHTML =
-      `<span class="cand-ico" style="color:${TAGS[c.tag].color}"><svg class="icon"><use href="#${c.video.icon}"/></svg></span>
-       <span class="cand-txt"><b>${c.video.title}</b><i>${c.tag} · вес ${state.weights[c.tag]}</i></span>
+      `<span class="cand-ico" style="color:${TAGS[c.tag].color}"><svg class="icon"><use href="#${vid ? vid.icon : TAGS[c.tag].icon}"/></svg></span>
+       <span class="cand-txt"><b>${vid ? vid.title : "—"}</b><i>${c.tag} · вес ${state.weights[c.tag]}</i></span>
        <b class="cand-prob">${Math.round(probs[i]*100)}%</b>`;
     el.style.borderLeftColor = TAGS[c.tag].color;
     box.appendChild(el);
@@ -1464,6 +1440,9 @@ function selectLane(i){
   });
 }
 
+/* ============================================================
+   СЛЕД
+   ============================================================ */
 function renderTrail(){
   const box = $("#trailChips");
   box.innerHTML = "";
@@ -1481,6 +1460,9 @@ function renderTrail(){
   });
 }
 
+/* ============================================================
+   КАРТОЧКА ВИДЕО + КОРЕНЬ
+   ============================================================ */
 function renderVideo(v){
   const card = $("#videoCard");
   card.classList.remove("watched");
@@ -1500,6 +1482,9 @@ function renderVideo(v){
   root.style.borderLeftColor = TAGS[v.tag].color;
 }
 
+/* ============================================================
+   ПАНЕЛЬ ВЕСОВ: строки
+   ============================================================ */
 const dockRefs = {};
 function buildDock(){
   const rows = $("#dockRows");
@@ -1546,6 +1531,9 @@ function renderDockRows(changedTag, delta){
   }
 }
 
+/* ============================================================
+   ПАНЕЛЬ ВЕСОВ: графики динамики
+   ============================================================ */
 const chartRefs = {};
 const CH = { W:220, H:92, padL:24, padR:8, padT:8, padB:16 };
 const chartY = v => CH.padT + (1 - v/10) * (CH.H - CH.padT - CH.padB);
@@ -1628,6 +1616,9 @@ function drawChart(tag){
 
 function renderCharts(){ TAG_NAMES.forEach(drawChart); }
 
+/* ============================================================
+   ПОДСКАЗКИ И УВЕДОМЛЕНИЯ ПРИ КРАЙНИХ ВЕСАХ
+   ============================================================ */
 function showChartHint(tag, html){
   const card = chartRefs[tag].card;
   card.querySelectorAll(".chart-hint").forEach(h => h.remove());
@@ -1663,6 +1654,24 @@ function maybeShowWeightHint(tag, oldW, newW){
   }
 }
 
+function checkBubble(){
+  if (state.actions < 10) return;
+  const dom = TAG_NAMES.find(t => state.weights[t] >= 8);
+  if (dom && state.bubbleTag !== dom){
+    state.bubbleTag = dom;
+    if (!state.bubbleAt) state.bubbleAt = state.actions;
+    showToast(
+      `<b>Фильтрующий пузырь сформирован!</b><br>
+       Твоя лента сузилась до одной темы: <b>${dom}</b>
+       (вес ${state.weights[dom]}/10). Разбавь её другими действиями.`,
+      "i-alert", "warn");
+  }
+  if (!dom) state.bubbleTag = null;
+}
+
+/* ============================================================
+   ПЛАШКА ОБЪЯСНЕНИЯ
+   ============================================================ */
 function showExplain(acts, video, oldW, newW, next, prob, isMax, appliedDelta){
   const phrase = joinRu(acts.map(a => ACTIONS[a].verb));
   const breakdown = acts.map(a => `${ACTIONS[a].delta>0?"+":""}${ACTIONS[a].delta} ${ACTIONS[a].short}`).join(", ");
@@ -1684,21 +1693,9 @@ function showExplain(acts, video, oldW, newW, next, prob, isMax, appliedDelta){
   box.classList.add("in");
 }
 
-function checkBubble(){
-  if (state.actions < 10) return;
-  const dom = TAG_NAMES.find(t => state.weights[t] >= 8);
-  if (dom && state.bubbleTag !== dom){
-    state.bubbleTag = dom;
-    if (!state.bubbleAt) state.bubbleAt = state.actions;
-    showToast(
-      `<b>Фильтрующий пузырь сформирован!</b><br>
-       Твоя лента сузилась до одной темы: <b>${dom}</b>
-       (вес ${state.weights[dom]}/10). Разбавь её другими действиями.`,
-      "i-alert", "warn");
-  }
-  if (!dom) state.bubbleTag = null;
-}
-
+/* ============================================================
+   ГЛАВНЫЙ ЦИКЛ
+   ============================================================ */
 function actCombo(acts){
   if (state.locked || modalOpen || statsOpen) return;
   state.locked = true;
@@ -1768,6 +1765,9 @@ function actCombo(acts){
   }, 650);
 }
 
+/* ============================================================
+   МОДАЛКА «РУКОВОДСТВО»
+   ============================================================ */
 const backdrop = $("#modalBackdrop");
 function openGuide(){ backdrop.classList.add("open"); modalOpen = true; document.body.style.overflow = "hidden"; }
 function closeGuide(){ backdrop.classList.remove("open"); modalOpen = false; document.body.style.overflow = ""; }
@@ -1776,6 +1776,9 @@ $("#modalClose").addEventListener("click", closeGuide);
 $("#modalGo").addEventListener("click", closeGuide);
 backdrop.addEventListener("click", e=>{ if (e.target === backdrop) closeGuide(); });
 
+/* ============================================================
+   МОДАЛКА «СТАТИСТИКА»
+   ============================================================ */
 const statsBackdrop = $("#statsBackdrop");
 function openStats(){
   renderStats();
@@ -1900,6 +1903,9 @@ function renderStats(){
   `;
 }
 
+/* ============================================================
+   СКОРОСТЬ ОБУЧЕНИЯ
+   ============================================================ */
 const SPEED_LABELS = ["×0.5","×1","×2","×3"];
 const savedSpeed = parseInt(localStorage.getItem("recsim-speed") || "1", 10);
 state.speedIdx = Math.max(0, Math.min(SPEED_STEPS.length-1, savedSpeed));
@@ -1913,6 +1919,9 @@ $("#speedRange").addEventListener("input", e=>{
   renderSelection();
 });
 
+/* ============================================================
+   ТЕМА
+   ============================================================ */
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
   localStorage.setItem("recsim-theme", t);
@@ -1923,6 +1932,9 @@ $("#themeBtn").addEventListener("click", ()=>{
 });
 applyTheme(document.documentElement.dataset.theme || "dark");
 
+/* ============================================================
+   СБРОС
+   ============================================================ */
 function reset(){
   document.querySelectorAll(".toast").forEach(t => t.remove());
   document.querySelectorAll(".chart-hint").forEach(h => h.remove());
@@ -1965,6 +1977,9 @@ function reset(){
   document.querySelectorAll(".action-btn").forEach(b => b.disabled = false);
 }
 
+/* ============================================================
+   ИНИЦИАЛИЗАЦИЯ
+   ============================================================ */
 buildDock();
 buildCharts();
 reset();
